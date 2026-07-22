@@ -2,9 +2,9 @@
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: {{ include "helm-law-craw.fullname" . }}-law-contracts
+  name: {{ include "helm-law-scraw.fullname" . }}-law-contracts
   labels:
-    {{- include "helm-law-craw.labels" . | nindent 4 }}
+    {{- include "helm-law-scraw.labels" . | nindent 4 }}
 spec:
   accessModes:
     {{- toYaml .Values.lawContracts.persistence.accessModes | nindent 4 }}

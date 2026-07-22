@@ -1,9 +1,9 @@
 apiVersion: batch/v1
 kind: CronJob
 metadata:
-  name: {{ include "helm-law-craw.fullname" . }}-law-contracts
+  name: {{ include "helm-law-scraw.fullname" . }}-law-contracts
   labels:
-    {{- include "helm-law-craw.labels" . | nindent 4 }}
+    {{- include "helm-law-scraw.labels" . | nindent 4 }}
 spec:
   schedule: {{ .Values.lawContracts.schedule | quote }}
   suspend: {{ .Values.lawContracts.suspend }}
@@ -15,18 +15,18 @@ spec:
       template:
         metadata:
           labels:
-            {{- include "helm-law-craw.selectorLabels" . | nindent 12 }}
+            {{- include "helm-law-scraw.selectorLabels" . | nindent 12 }}
             app.kubernetes.io/component: law-contracts
         spec:
-          {{- include "helm-law-craw.imagePullSecrets" . | nindent 10 }}
+          {{- include "helm-law-scraw.imagePullSecrets" . | nindent 10 }}
           restartPolicy: OnFailure
           containers:
             - name: runner
-              image: "{{ .Values.images.lawContracts.repository }}:{{ .Values.images.lawContracts.tag }}"
+              image: "{{ include "helm-law-scraw.image" (dict "repository" .Values.images.lawContracts.repository "tag" .Values.images.lawContracts.tag "registry" $.Values.registry) }}"
               imagePullPolicy: {{ .Values.images.lawContracts.pullPolicy }}
               env:
                 - name: REDIS_URL
-                  value: {{ include "helm-law-craw.runnerRedisUrl" . | quote }}
+                  value: {{ include "helm-law-scraw.runnerRedisUrl" . | quote }}
                 - name: SQLITE_PATH
                   value: {{ .Values.lawContracts.sqlitePath | quote }}
                 - name: JSONL_PATH
@@ -44,5 +44,5 @@ spec:
           volumes:
             - name: crawl-data
               persistentVolumeClaim:
-                claimName: {{ include "helm-law-craw.fullname" . }}-law-contracts
+                claimName: {{ include "helm-law-scraw.fullname" . }}-law-contracts
           {{- end }}

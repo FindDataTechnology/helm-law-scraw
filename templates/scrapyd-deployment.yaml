@@ -1,25 +1,25 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "helm-law-craw.fullname" . }}-scrapyd
+  name: {{ include "helm-law-scraw.fullname" . }}-scrapyd
   labels:
-    {{- include "helm-law-craw.labels" . | nindent 4 }}
+    {{- include "helm-law-scraw.labels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.scrapyd.replicas }}
   selector:
     matchLabels:
-      {{- include "helm-law-craw.selectorLabels" . | nindent 6 }}
+      {{- include "helm-law-scraw.selectorLabels" . | nindent 6 }}
       app.kubernetes.io/component: scrapyd
   template:
     metadata:
       labels:
-        {{- include "helm-law-craw.selectorLabels" . | nindent 8 }}
+        {{- include "helm-law-scraw.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: scrapyd
     spec:
-      {{- include "helm-law-craw.imagePullSecrets" . | nindent 6 }}
+      {{- include "helm-law-scraw.imagePullSecrets" . | nindent 6 }}
       containers:
         - name: scrapyd
-          image: "{{ .Values.images.scrapyd.repository }}:{{ .Values.images.scrapyd.tag }}"
+          image: "{{ include "helm-law-scraw.image" (dict "repository" .Values.images.scrapyd.repository "tag" .Values.images.scrapyd.tag "registry" $.Values.registry) }}"
           imagePullPolicy: {{ .Values.images.scrapyd.pullPolicy }}
           ports:
             - name: http
@@ -27,7 +27,7 @@ spec:
               protocol: TCP
           env:
             - name: REDIS_URL
-              value: {{ include "helm-law-craw.scrapydRedisUrl" . | quote }}
+              value: {{ include "helm-law-scraw.scrapydRedisUrl" . | quote }}
           volumeMounts:
             - name: scrapyd-config
               mountPath: /etc/scrapyd/scrapyd.conf
@@ -36,14 +36,14 @@ spec:
       volumes:
         - name: scrapyd-config
           configMap:
-            name: {{ include "helm-law-craw.fullname" . }}-scrapyd
+            name: {{ include "helm-law-scraw.fullname" . }}-scrapyd
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "helm-law-craw.fullname" . }}-scrapyd
+  name: {{ include "helm-law-scraw.fullname" . }}-scrapyd
   labels:
-    {{- include "helm-law-craw.labels" . | nindent 4 }}
+    {{- include "helm-law-scraw.labels" . | nindent 4 }}
 spec:
   type: ClusterIP
   ports:
@@ -52,5 +52,5 @@ spec:
       protocol: TCP
       name: http
   selector:
-    {{- include "helm-law-craw.selectorLabels" . | nindent 4 }}
+    {{- include "helm-law-scraw.selectorLabels" . | nindent 4 }}
     app.kubernetes.io/component: scrapyd

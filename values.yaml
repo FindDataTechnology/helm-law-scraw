@@ -1,26 +1,37 @@
-# helm-law-craw values
+# helm-law-scraw values
 #
-# Harbor registry is HTTP-only (23.144.68.246:30880). The chart creates an
-# imagePullSecret for auth, but k8s NODES must also be configured to treat the
-# registry as insecure (containerd/docker insecure-registries). See README.md.
+# Scrapyd + law-crawling stack with Redis and PostgreSQL.
+# Image reference pattern: <registry>/<repository>:<tag>
+#
+# Default registry is Docker Hub. Override for private registries:
+#   helm install ... --set registry=myregistry.example.com:5000/myproject
 
-harbor:
-  host: 23.144.68.246:30880
-  project: scraw
-  username: ""        # robot account, e.g. robot$scraw+scraw-ci
+# --- Image registry ---
+# Prepended to all image.repository values. Leave empty for bare image names.
+# Example: "docker.io" -> images become "docker.io/scraw-ops-scrapyd:latest"
+registry: docker.io
+
+# --- Image pull credentials (optional) ---
+# Set username/password to create an imagePullSecret, or set existingSecret
+# to reuse a pre-created one. Leave all empty for public registries / Docker Hub.
+imageCredentials:
+  host: ""            # registry hostname for the auth in the imagePullSecret
+  username: ""        # registry username (e.g. robot$project+name)
   password: ""
-  existingSecret: ""  # set to reuse a pre-created imagePullSecret; empty -> chart creates one
+  existingSecret: ""  # pre-created imagePullSecret name; overrides username/password if set
 
 nameOverride: ""
 fullnameOverride: ""
 
 images:
   scrapyd:
-    repository: 23.144.68.246:30880/scraw/scraw-ops-scrapyd
+    # Full image path WITHOUT the registry prefix (registry is prepended automatically).
+    # Example: registry=docker.io, repository=scraw-ops-scrapyd -> docker.io/scraw-ops-scrapyd:latest
+    repository: scraw-ops-scrapyd
     tag: latest
     pullPolicy: Always
   lawContracts:
-    repository: 23.144.68.246:30880/scraw/scraw-law-contracts
+    repository: scraw-law-contracts
     tag: latest
     pullPolicy: Always
 
@@ -47,14 +58,18 @@ lawContracts:
       - ReadWriteOnce
     size: 5Gi
 
-# Bitnami subcharts - disable either to point at an external host (set the
-# corresponding *redisUrl* / a postgres URL in scrapyd/lawContracts).
+# Bitnami subcharts
 redis:
   enabled: true
   architecture: standalone
+  # Auth is disabled by default because the chart's Redis URL has no password.
+  # If you enable auth, update _helpers.tpl to include the password in the URL.
+  auth:
+    enabled: false
 
 postgresql:
   enabled: true
   auth:
-    postgresPassword: ""   # set a password; empty -> Bitnami generates one at install
+    # Set a password or leave empty; Bitnami generates one if empty.
+    postgresPassword: "changeme"
     database: scraw

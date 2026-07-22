@@ -1,21 +1,21 @@
-helm-law-craw chart installed as release "{{ .Release.Name }}" in namespace "{{ .Release.Namespace }}".
+🎣 {{ .Release.Name }} deployed
 
 Components:
-  scrapyd          Service: {{ include "helm-law-craw.fullname" . }}-scrapyd:6800
-  law-contracts    CronJob: {{ include "helm-law-craw.fullname" . }}-law-contracts
+  scrapyd          Service: {{ include "helm-law-scraw.fullname" . }}-scrapyd:6800
+  law-contracts    CronJob: {{ include "helm-law-scraw.fullname" . }}-law-contracts
                    schedule={{ .Values.lawContracts.schedule }}  suspend={{ .Values.lawContracts.suspend }}
   redis            {{ .Release.Name }}-redis-master:6379  (Bitnami{{ if not .Values.redis.enabled }} - DISABLED{{ end }})
   postgresql       {{ .Release.Name }}-postgresql:5432    (Bitnami{{ if not .Values.postgresql.enabled }} - DISABLED{{ end }})
 
-PREREQUISITE - Harbor is HTTP-only ({{ .Values.harbor.host }}):
-  Every k8s node must treat {{ .Values.harbor.host }} as an insecure registry
-  (containerd config.toml mirrors + tls.insecure_skip_verify, or docker daemon.json
-  insecure-registries). The chart's imagePullSecret provides AUTH only; it cannot
-  configure node runtimes. See README.md for the exact snippet.
+{{- if .Values.imageCredentials.host }}
+⚠️  Insecure registry note: {{ .Values.imageCredentials.host }} serves HTTP-only.
+  Every k8s node must treat it as an insecure registry. See README.md for the
+  containerd and docker configuration snippets.
+{{- end }}
 
 Forward scrapyd and list projects:
-  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "helm-law-craw.fullname" . }}-scrapyd 6800:6800
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "helm-law-scraw.fullname" . }}-scrapyd 6800:6800
   curl -s http://localhost:6800/listprojects.json | python3 -m json.tool
 
 Trigger a runner run immediately:
-  kubectl -n {{ .Release.Namespace }} create job --from=cronjob/{{ include "helm-law-craw.fullname" . }}-law-contracts manual-1
+  kubectl -n {{ .Release.Namespace }} create job --from=cronjob/{{ include "helm-law-scraw.fullname" . }}-law-contracts manual-1
