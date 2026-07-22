@@ -1,0 +1,60 @@
+# helm-law-craw values
+#
+# Harbor registry is HTTP-only (23.144.68.246:30880). The chart creates an
+# imagePullSecret for auth, but k8s NODES must also be configured to treat the
+# registry as insecure (containerd/docker insecure-registries). See README.md.
+
+harbor:
+  host: 23.144.68.246:30880
+  project: scraw
+  username: ""        # robot account, e.g. robot$scraw+scraw-ci
+  password: ""
+  existingSecret: ""  # set to reuse a pre-created imagePullSecret; empty -> chart creates one
+
+nameOverride: ""
+fullnameOverride: ""
+
+images:
+  scrapyd:
+    repository: 23.144.68.246:30880/scraw/scraw-ops-scrapyd
+    tag: latest
+    pullPolicy: Always
+  lawContracts:
+    repository: 23.144.68.246:30880/scraw/scraw-law-contracts
+    tag: latest
+    pullPolicy: Always
+
+scrapyd:
+  replicas: 1
+  redisUrl: ""        # empty -> redis://<release>-redis-master:6379/0 (in-chart redis)
+  config:
+    maxProc: "4"
+    jobsToKeep: "10"
+    dbsToKeep: "5"
+
+lawContracts:
+  spider: samr_contracts
+  schedule: "0 2 * * *"     # daily 02:00
+  suspend: false
+  concurrencyPolicy: Forbid
+  redisUrl: ""              # empty -> in-chart redis
+  sqlitePath: data/scraw.db
+  jsonlPath: output/items.jl
+  persistence:
+    enabled: true
+    storageClassName: ""
+    accessModes:
+      - ReadWriteOnce
+    size: 5Gi
+
+# Bitnami subcharts - disable either to point at an external host (set the
+# corresponding *redisUrl* / a postgres URL in scrapyd/lawContracts).
+redis:
+  enabled: true
+  architecture: standalone
+
+postgresql:
+  enabled: true
+  auth:
+    postgresPassword: ""   # set a password; empty -> Bitnami generates one at install
+    database: scraw

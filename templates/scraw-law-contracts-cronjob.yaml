@@ -1,0 +1,48 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "helm-law-craw.fullname" . }}-law-contracts
+  labels:
+    {{- include "helm-law-craw.labels" . | nindent 4 }}
+spec:
+  schedule: {{ .Values.lawContracts.schedule | quote }}
+  suspend: {{ .Values.lawContracts.suspend }}
+  concurrencyPolicy: {{ .Values.lawContracts.concurrencyPolicy }}
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            {{- include "helm-law-craw.selectorLabels" . | nindent 12 }}
+            app.kubernetes.io/component: law-contracts
+        spec:
+          {{- include "helm-law-craw.imagePullSecrets" . | nindent 10 }}
+          restartPolicy: OnFailure
+          containers:
+            - name: runner
+              image: "{{ .Values.images.lawContracts.repository }}:{{ .Values.images.lawContracts.tag }}"
+              imagePullPolicy: {{ .Values.images.lawContracts.pullPolicy }}
+              env:
+                - name: REDIS_URL
+                  value: {{ include "helm-law-craw.runnerRedisUrl" . | quote }}
+                - name: SQLITE_PATH
+                  value: {{ .Values.lawContracts.sqlitePath | quote }}
+                - name: JSONL_PATH
+                  value: {{ .Values.lawContracts.jsonlPath | quote }}
+              {{- if .Values.lawContracts.persistence.enabled }}
+              volumeMounts:
+                - name: crawl-data
+                  mountPath: /app/data
+                  subPath: data
+                - name: crawl-data
+                  mountPath: /app/output
+                  subPath: output
+              {{- end }}
+          {{- if .Values.lawContracts.persistence.enabled }}
+          volumes:
+            - name: crawl-data
+              persistentVolumeClaim:
+                claimName: {{ include "helm-law-craw.fullname" . }}-law-contracts
+          {{- end }}

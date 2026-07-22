@@ -1,0 +1,15 @@
+apiVersion: v2
+name: helm-law-craw
+description: Helm chart for the scraw law-crawling stack (scrapyd + SAMR contracts runner + redis + postgres) pulling images from Harbor
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+dependencies:
+  - name: redis
+    version: "27.0.15"
+    repository: https://charts.bitnami.com/bitnami
+    condition: redis.enabled
+  - name: postgresql
+    version: "18.8.0"
+    repository: https://charts.bitnami.com/bitnami
+    condition: postgresql.enabled

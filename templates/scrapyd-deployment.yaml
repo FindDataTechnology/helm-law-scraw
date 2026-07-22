@@ -1,0 +1,56 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "helm-law-craw.fullname" . }}-scrapyd
+  labels:
+    {{- include "helm-law-craw.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.scrapyd.replicas }}
+  selector:
+    matchLabels:
+      {{- include "helm-law-craw.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: scrapyd
+  template:
+    metadata:
+      labels:
+        {{- include "helm-law-craw.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: scrapyd
+    spec:
+      {{- include "helm-law-craw.imagePullSecrets" . | nindent 6 }}
+      containers:
+        - name: scrapyd
+          image: "{{ .Values.images.scrapyd.repository }}:{{ .Values.images.scrapyd.tag }}"
+          imagePullPolicy: {{ .Values.images.scrapyd.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 6800
+              protocol: TCP
+          env:
+            - name: REDIS_URL
+              value: {{ include "helm-law-craw.scrapydRedisUrl" . | quote }}
+          volumeMounts:
+            - name: scrapyd-config
+              mountPath: /etc/scrapyd/scrapyd.conf
+              subPath: scrapyd.conf
+              readOnly: true
+      volumes:
+        - name: scrapyd-config
+          configMap:
+            name: {{ include "helm-law-craw.fullname" . }}-scrapyd
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "helm-law-craw.fullname" . }}-scrapyd
+  labels:
+    {{- include "helm-law-craw.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - port: 6800
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "helm-law-craw.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: scrapyd

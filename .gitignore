@@ -1,0 +1,9 @@
+# Packaged chart dependencies (from `helm dependency update`) - users rebuild locally.
+# Chart.lock IS committed to pin exact dependency versions.
+charts/
+*.tgz
+
+# macOS / editor
+.DS_Store
+.idea/
+.vscode/

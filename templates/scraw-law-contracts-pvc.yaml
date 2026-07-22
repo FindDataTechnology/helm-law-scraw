@@ -1,0 +1,17 @@
+{{- if .Values.lawContracts.persistence.enabled -}}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "helm-law-craw.fullname" . }}-law-contracts
+  labels:
+    {{- include "helm-law-craw.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    {{- toYaml .Values.lawContracts.persistence.accessModes | nindent 4 }}
+  {{- if .Values.lawContracts.persistence.storageClassName }}
+  storageClassName: {{ .Values.lawContracts.persistence.storageClassName | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.lawContracts.persistence.size | quote }}
+{{- end -}}
