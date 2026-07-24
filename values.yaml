@@ -32,7 +32,8 @@ images:
     pullPolicy: Always
   lawContracts:
     repository: scraw-law-contracts
-    tag: latest
+    # Pinned to the MinIO-enabled build (commit b9a72ee). Bump on the next image.
+    tag: sha-b9a72ee
     pullPolicy: Always
 
 scrapyd:
@@ -57,6 +58,18 @@ lawContracts:
     accessModes:
       - ReadWriteOnce
     size: 5Gi
+
+# --- MinIO object storage (contract document archival) ---
+# Surfaced as MINIO_* env on the law-contracts CronJob. accessKey/secretKey are
+# placeholders here; supply real values via the ArgoCD valuesObject (local-only
+# scraw.yaml) - never commit real credentials to this chart.
+minio:
+  endpoint: minio.minio.svc.cluster.local:9000
+  accessKey: change-me
+  secretKey: change-me
+  secure: false
+  bucket: scraw-law-contracts
+  uploadEnabled: true
 
 # Bitnami subcharts
 redis:

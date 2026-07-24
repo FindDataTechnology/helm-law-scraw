@@ -31,6 +31,18 @@ spec:
                   value: {{ .Values.lawContracts.sqlitePath | quote }}
                 - name: JSONL_PATH
                   value: {{ .Values.lawContracts.jsonlPath | quote }}
+                - name: MINIO_ENDPOINT
+                  value: {{ .Values.minio.endpoint | quote }}
+                - name: MINIO_ACCESS_KEY
+                  value: {{ .Values.minio.accessKey | quote }}
+                - name: MINIO_SECRET_KEY
+                  value: {{ .Values.minio.secretKey | quote }}
+                - name: MINIO_SECURE
+                  value: {{ .Values.minio.secure | quote }}
+                - name: MINIO_BUCKET
+                  value: {{ .Values.minio.bucket | quote }}
+                - name: MINIO_UPLOAD_ENABLED
+                  value: {{ .Values.minio.uploadEnabled | quote }}
               {{- if .Values.lawContracts.persistence.enabled }}
               volumeMounts:
                 - name: crawl-data

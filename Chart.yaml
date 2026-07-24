@@ -2,8 +2,8 @@ apiVersion: v2
 name: helm-law-scraw
 description: Helm chart for the scraw law-crawling stack — scrapyd + SAMR contracts runner (CronJob) + Bitnami redis + Bitnami postgresql
 type: application
-version: 0.1.0
-appVersion: "0.1.0"
+version: 0.1.1
+appVersion: "0.1.1"
 dependencies:
   - name: redis
     version: "27.0.15"
