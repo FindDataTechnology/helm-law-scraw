@@ -7,3 +7,12 @@ charts/
 .DS_Store
 .idea/
 .vscode/
+
+# Env / secrets — real values stay out of git (use --set or -f secrets.yaml)
+.env
+.env.*
+secrets*.yaml
+values-secret*.yaml
+kubeconfig*
+*.pem
+*.key
