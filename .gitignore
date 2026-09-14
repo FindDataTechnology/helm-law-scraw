@@ -11,8 +11,18 @@ charts/
 # Env / secrets — real values stay out of git (use --set or -f secrets.yaml)
 .env
 .env.*
+!.env.example
 secrets*.yaml
 values-secret*.yaml
 kubeconfig*
 *.pem
 *.key
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Databases
+*.db
+*.sqlite3
