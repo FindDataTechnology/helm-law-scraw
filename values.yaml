@@ -50,7 +50,7 @@ images:
     pullPolicy: IfNotPresent
   authBroker:
     repository: lawcraw_business/legal-auth-broker
-    tag: sha-3cf32c6
+    tag: sha-b726e1f
     pullPolicy: IfNotPresent
 
 scrapyd:
