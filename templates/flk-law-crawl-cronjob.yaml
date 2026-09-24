@@ -1,0 +1,53 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "helm-law-scraw.fullname" . }}-flk-law-crawl
+  labels:
+    {{- include "helm-law-scraw.labels" . | nindent 4 }}
+spec:
+  schedule: {{ .Values.flkLawCrawl.schedule | quote }}
+  suspend: {{ .Values.flkLawCrawl.suspend }}
+  concurrencyPolicy: {{ .Values.flkLawCrawl.concurrencyPolicy }}
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      {{- with .Values.flkLawCrawl.activeDeadlineSeconds }}
+      activeDeadlineSeconds: {{ . }}
+      {{- end }}
+      template:
+        metadata:
+          labels:
+            {{- include "helm-law-scraw.selectorLabels" . | nindent 12 }}
+            app.kubernetes.io/component: flk-law-crawl
+        spec:
+          {{- include "helm-law-scraw.imagePullSecrets" . | nindent 10 }}
+          restartPolicy: OnFailure
+          containers:
+            - name: crawler
+              image: "{{ include "helm-law-scraw.image" (dict "repository" .Values.images.flkLawCrawl.repository "tag" .Values.images.flkLawCrawl.tag "registry" $.Values.registry) }}"
+              imagePullPolicy: {{ .Values.images.flkLawCrawl.pullPolicy }}
+              env:
+                - name: RUSTFS_ENDPOINT
+                  value: {{ .Values.flkLawCrawl.rustfs.endpoint | quote }}
+                - name: RUSTFS_ACCESS_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ .Values.flkLawCrawl.secretName }}
+                      key: rustfs-access-key
+                - name: RUSTFS_SECRET_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ .Values.flkLawCrawl.secretName }}
+                      key: rustfs-secret-key
+                - name: RUSTFS_REGION
+                  value: {{ .Values.flkLawCrawl.rustfs.region | quote }}
+                - name: LAWS_BUCKET
+                  value: {{ .Values.flkLawCrawl.lawsBucket | quote }}
+                - name: FLK_RATE_MS
+                  value: {{ .Values.flkLawCrawl.rateMs | quote }}
+                - name: FLK_PAGE_SIZE
+                  value: {{ .Values.flkLawCrawl.pageSize | quote }}
+                - name: FLK_LOOKBACK_DAYS
+                  value: {{ .Values.flkLawCrawl.lookbackDays | quote }}
+              command: ["node", "bin/flk-crawl.mjs"]

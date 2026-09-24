@@ -1,0 +1,69 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "helm-law-scraw.fullname" . }}-wenshu-crawl
+  labels:
+    {{- include "helm-law-scraw.labels" . | nindent 4 }}
+spec:
+  schedule: {{ .Values.wenshuCrawl.schedule | quote }}
+  suspend: {{ .Values.wenshuCrawl.suspend }}
+  concurrencyPolicy: {{ .Values.wenshuCrawl.concurrencyPolicy }}
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      {{- with .Values.wenshuCrawl.activeDeadlineSeconds }}
+      activeDeadlineSeconds: {{ . }}
+      {{- end }}
+      template:
+        metadata:
+          labels:
+            {{- include "helm-law-scraw.selectorLabels" . | nindent 12 }}
+            app.kubernetes.io/component: wenshu-crawl
+        spec:
+          {{- include "helm-law-scraw.imagePullSecrets" . | nindent 10 }}
+          restartPolicy: OnFailure
+          containers:
+            - name: crawler
+              image: "{{ include "helm-law-scraw.image" (dict "repository" .Values.images.wenshuCrawl.repository "tag" .Values.images.wenshuCrawl.tag "registry" $.Values.registry) }}"
+              imagePullPolicy: {{ .Values.images.wenshuCrawl.pullPolicy }}
+              env:
+                - name: RUSTFS_ENDPOINT
+                  value: {{ .Values.wenshuCrawl.rustfs.endpoint | quote }}
+                - name: RUSTFS_ACCESS_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ .Values.wenshuCrawl.secretName }}
+                      key: rustfs-access-key
+                - name: RUSTFS_SECRET_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ .Values.wenshuCrawl.secretName }}
+                      key: rustfs-secret-key
+                - name: RUSTFS_REGION
+                  value: {{ .Values.wenshuCrawl.rustfs.region | quote }}
+                - name: WENSHU_BUCKET
+                  value: {{ .Values.wenshuCrawl.wenshuBucket | quote }}
+                - name: WENSHU_RATE_MS
+                  value: {{ .Values.wenshuCrawl.rateMs | quote }}
+                - name: WENSHU_LOOKBACK_DAYS
+                  value: {{ .Values.wenshuCrawl.lookbackDays | quote }}
+                - name: WENSHU_RESULT_CAP
+                  value: {{ .Values.wenshuCrawl.resultCap | quote }}
+                - name: WENSHU_BUDGET_MS
+                  value: {{ .Values.wenshuCrawl.budgetMs | quote }}
+                - name: WENSHU_ACCOUNT_USER
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ .Values.wenshuCrawl.secretName }}
+                      key: wenshu-account-user
+                - name: WENSHU_ACCOUNT_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ .Values.wenshuCrawl.secretName }}
+                      key: wenshu-account-password
+                {{- if .Values.wenshuCrawl.proxyUrl }}
+                - name: WENSHU_PROXY_URL
+                  value: {{ .Values.wenshuCrawl.proxyUrl | quote }}
+                {{- end }}
+              command: ["node", "bin/wenshu-crawl.mjs"]

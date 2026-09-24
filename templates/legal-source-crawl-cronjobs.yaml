@@ -1,0 +1,57 @@
+{{- range $sourceId, $source := .Values.legalSources.sources }}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "helm-law-scraw.fullname" $ }}-{{ $sourceId }}
+  labels:
+    {{- include "helm-law-scraw.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: legal-source-crawl
+spec:
+  schedule: {{ $source.schedule | quote }}
+  suspend: {{ $source.suspend }}
+  concurrencyPolicy: {{ $source.concurrencyPolicy | default "Forbid" }}
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      {{- with $source.activeDeadlineSeconds }}
+      activeDeadlineSeconds: {{ . }}
+      {{- end }}
+      template:
+        metadata:
+          labels:
+            {{- include "helm-law-scraw.selectorLabels" $ | nindent 12 }}
+            app.kubernetes.io/component: legal-source-crawl
+            legal.finddata.io/source: {{ $sourceId }}
+        spec:
+          {{- include "helm-law-scraw.imagePullSecrets" $ | nindent 10 }}
+          restartPolicy: OnFailure
+          containers:
+            - name: crawler
+              image: "{{ include "helm-law-scraw.image" (dict "repository" $.Values.images.flkLawCrawl.repository "tag" $.Values.images.flkLawCrawl.tag "registry" $.Values.registry) }}"
+              imagePullPolicy: {{ $.Values.images.flkLawCrawl.pullPolicy }}
+              env:
+                - name: RUSTFS_ENDPOINT
+                  value: {{ $.Values.legalSources.rustfs.endpoint | quote }}
+                - name: RUSTFS_ACCESS_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ $.Values.legalSources.secretName }}
+                      key: rustfs-access-key
+                - name: RUSTFS_SECRET_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ $.Values.legalSources.secretName }}
+                      key: rustfs-secret-key
+                - name: RUSTFS_REGION
+                  value: {{ $.Values.legalSources.rustfs.region | quote }}
+                - name: LAWS_BUCKET
+                  value: {{ $.Values.legalSources.lawsBucket | quote }}
+                {{- if $source.proxyEnvName }}
+                - name: {{ $source.proxyEnvName }}
+                  value: {{ $source.proxyEnvValue | default "" | quote }}
+                {{- end }}
+              command:
+{{ toYaml $source.command | indent 16 }}
+{{- end }}

@@ -2,12 +2,14 @@
 
 Helm chart for the **scraw law-crawling stack**: deploys `scrapyd` (shared crawl
 service), the `scraw-law-contracts` runner (SAMR contract templates crawler as a
-CronJob), and `redis` + `postgresql` (Bitnami subcharts).
+CronJob), the `flk-law-crawl` runner (flk.npc.gov.cn regulation incremental
+crawler, from `fd-law-data`), and `redis` + `postgresql` (Bitnami subcharts).
 
 | Component          | Kind      | Image reference                            |
 |--------------------|-----------|--------------------------------------------|
 | scrapyd            | Deployment+Service `:6800` | `<registry>/scraw-ops-scrapyd:<tag>` |
 | scraw-law-contracts| CronJob   | `<registry>/scraw-law-contracts:<tag>`     |
+| flk-law-crawl      | CronJob   | `<registry>/fd-law-data:<tag>`             |
 | redis              | Bitnami subchart (standalone) | —                                    |
 | postgresql         | Bitnami subchart            | —                                       |
 
@@ -106,6 +108,11 @@ kubectl -n scraw create job --from=cronjob/law-craw-helm-law-scraw-law-contracts
 | `imageCredentials.existingSecret` | `""` | Reuse a pre-created imagePullSecret |
 | `images.scrapyd.{repository,tag,pullPolicy}` | `scraw-ops-scrapyd:latest` | scrapyd image |
 | `images.lawContracts.{repository,tag,pullPolicy}` | `scraw-law-contracts:latest` | runner image |
+| `images.flkLawCrawl.{repository,tag,pullPolicy}` | `fd-law-data:latest` | flk crawler image |
+| `flkLawCrawl.{schedule,suspend,concurrencyPolicy,activeDeadlineSeconds}` | `30 2 * * *`, false, Forbid, 14400 | flk CronJob scheduling |
+| `flkLawCrawl.secretName` | `flk-law-crawl-credentials` | Secret with `rustfs-access-key` / `rustfs-secret-key` |
+| `flkLawCrawl.rustfs.endpoint`, `.region` | `https://file.finddatatech.cloud`, `us-east-1` | RustFS public endpoint |
+| `flkLawCrawl.{lawsBucket,rateMs,pageSize,lookbackDays}` | `laws`, 1100, 100, 7 | crawler behaviour |
 | `scrapyd.replicas` | `1` | scrapyd Deployment replicas |
 | `scrapyd.redisUrl` | `""` | Override redis (empty → in-chart redis) |
 | `lawContracts.schedule` | `0 2 * * *` | CronJob schedule |

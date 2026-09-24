@@ -35,6 +35,23 @@ images:
     # Pinned to the MinIO-enabled build (commit b9a72ee). Bump on the next image.
     tag: sha-b9a72ee
     pullPolicy: Always
+  flkLawCrawl:
+    # Built from fd-law-data/ via cheap-1 buildkit; pushed to the lawcraw_business
+    # project (the only Harbor project with working push credentials as of
+    # 2026-09-18). Relocate to the public finddata/ project once current Harbor
+    # admin credentials are available.
+    repository: lawcraw_business/fd-law-data
+    tag: v0.1.9
+    pullPolicy: IfNotPresent
+  wenshuCrawl:
+    # Playwright image built from fd-law-data/Dockerfile.wenshu (browsers included).
+    repository: lawcraw_business/fd-law-data-wenshu
+    tag: v0.1.0
+    pullPolicy: IfNotPresent
+  authBroker:
+    repository: lawcraw_business/legal-auth-broker
+    tag: sha-3cf32c6
+    pullPolicy: IfNotPresent
 
 scrapyd:
   replicas: 1
@@ -70,6 +87,143 @@ minio:
   secure: false
   bucket: scraw-law-contracts
   uploadEnabled: true
+
+# --- flk law incremental crawl (fd-law-data) ---
+# Daily crawl of newly published regulations from flk.npc.gov.cn into the
+# `laws` bucket `incremental/` prefix. Crawler holds NO PG credentials — the
+# loader (flk-load.mjs) runs separately on the data machine. rustfs credentials
+# are placeholders; supply real values via local-only values, never committed.
+flkLawCrawl:
+  schedule: "30 2 * * *"    # daily 02:30 (after law-contracts)
+  suspend: false
+  concurrencyPolicy: Forbid
+  activeDeadlineSeconds: 14400   # 4 h is generous for daily increments
+  secretName: flk-law-crawl-credentials
+  lawsBucket: laws
+  rateMs: 1100
+  pageSize: 100
+  lookbackDays: 7
+  rustfs:
+    endpoint: http://100.64.0.11:9000   # tailnet-internal RustFS (chart installs target the tailnet cluster)
+    region: us-east-1
+
+# --- wave-1 authoritative legal sources (fd-law-data) ---
+# Each source writes legal-sources/<id>/ in the laws bucket; loaders run on the
+# data machine. CronJobs are suspended by default: pin a Jenkins sha image and
+# validate a local dry run before enabling. Proxy/account values, when needed,
+# belong in local-only ArgoCD values or a Secret, never in this chart.
+legalSources:
+  secretName: flk-law-crawl-credentials
+  lawsBucket: laws
+  rustfs:
+    endpoint: http://100.64.0.11:9000
+    region: us-east-1
+  sources:
+    rmfyalk-case-library:
+      schedule: "10 3 * * *"
+      suspend: true
+      concurrencyPolicy: Forbid
+      activeDeadlineSeconds: 21600
+      command: ["node", "bin/rmfyalk-crawl.mjs", "--rate-ms", "1100"]
+      proxyEnvName: RMFYALK_CASE_LIBRARY_PROXY_URL
+      proxyEnvValue: ""
+    mfa-treaty-library:
+      schedule: "20 3 * * *"
+      suspend: true
+      concurrencyPolicy: Forbid
+      activeDeadlineSeconds: 14400
+      command: ["node", "bin/mfa-treaty-crawl.mjs", "--rate-ms", "1100"]
+    gov-rules-library:
+      schedule: "30 3 * * *"
+      suspend: true
+      concurrencyPolicy: Forbid
+      activeDeadlineSeconds: 14400
+      command: ["node", "bin/gov-rules-crawl.mjs", "--rate-ms", "1100"]
+    party-regulation-library:
+      schedule: "40 3 * * *"
+      suspend: true
+      concurrencyPolicy: Forbid
+      activeDeadlineSeconds: 14400
+      command: ["node", "bin/party-regulation-crawl.mjs", "--rate-ms", "1100"]
+    ccdi-supervisory-regulations:
+      schedule: "50 3 * * *"
+      suspend: true
+      concurrencyPolicy: Forbid
+      activeDeadlineSeconds: 14400
+      command: ["node", "bin/ccdi-supervisory-crawl.mjs", "--rate-ms", "1100"]
+    flk-law-backfill:
+      schedule: "0 */4 * * *"
+      suspend: true
+      concurrencyPolicy: Forbid
+      activeDeadlineSeconds: 21600
+      command:
+        - node
+        - bin/flk-crawl.mjs
+        - --backfill
+        - --until
+        - "2026-09-23"
+        - --batch-days
+        - "365"
+
+# --- legal Auth Broker (login/session lease API) ---
+# Provides the isolated browser login runtime and the crawler-facing lease API.
+# Account credentials, jar keys and proxy URLs are injected from Secrets; none
+# are stored in this chart.
+authBroker:
+  enabled: true
+  replicas: 1
+  secretName: legal-auth-broker
+  identitySecretName: legal-identity-rmfyalk-acct001
+  rustfs:
+    endpoint: http://100.64.0.11:9000
+    region: us-east-1
+  lawsBucket: laws
+  postgres:
+    host: 100.64.0.5
+    port: 5432
+    database: law_db
+    secretName: flk-law-pg-credentials
+    userKey: pg-user
+    passwordKey: pg-password
+  service:
+    type: ClusterIP
+    port: 80
+    targetPort: 8787
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+# --- wenshu incremental crawl (fd-law-data, Playwright browser automation) ---
+# Nightly capture of newly published judgments into the `wenshu` bucket
+# raw/{y}/{m}/ crawl files. Holds NO PG credentials (loader runs on the data
+# machine). The wenshu ACCOUNT reaches the cluster ONLY via the Secret named
+# below (local-only values create it; never commit real credentials).
+# Nightly start 01:00 Asia/Shanghai; ~20 h deadline; Forbid concurrency.
+#
+# ⚠ suspend stays TRUE on purpose: running this from a cluster (datacenter IP)
+# with the account attached is the one shape wenshu punishes — a cold start from
+# an IP that never matched the session's origin. The supported shape is the warm
+# browser on the operator Mac; see fd-law-data/README "wenshu". Flipping this to
+# false requires sticky egress (design.md D6) plus a resumed account.
+wenshuCrawl:
+  schedule: "0 17 * * *"        # 01:00 Asia/Shanghai (nodes run UTC)
+  suspend: true
+  concurrencyPolicy: Forbid
+  activeDeadlineSeconds: 72000  # ~20 h; budget enforcement also inside the crawler (19 h default)
+  secretName: wenshu-crawl-credentials   # keys: rustfs-access-key, rustfs-secret-key, wenshu-account-user, wenshu-account-password
+  wenshuBucket: wenshu
+  rateMs: 1000                  # ~1 doc/s on detail fetches
+  lookbackDays: 7
+  resultCap: 200
+  budgetMs: "68400000"          # 19 h internal budget (string to avoid float rendering)
+  proxyUrl: ""                  # sticky exit IP via fd-proxy-service (design.md D6); "" = direct
+  rustfs:
+    endpoint: http://100.64.0.11:9000
+    region: us-east-1
 
 # Bitnami subcharts
 redis:

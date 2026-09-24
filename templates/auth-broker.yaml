@@ -1,0 +1,119 @@
+{{- if .Values.authBroker.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "helm-law-scraw.fullname" . }}-auth-broker
+  labels:
+    {{- include "helm-law-scraw.labels" . | nindent 4 }}
+    app.kubernetes.io/component: auth-broker
+spec:
+  replicas: {{ .Values.authBroker.replicas }}
+  selector:
+    matchLabels:
+      {{- include "helm-law-scraw.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: auth-broker
+  template:
+    metadata:
+      labels:
+        {{- include "helm-law-scraw.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: auth-broker
+    spec:
+      {{- include "helm-law-scraw.imagePullSecrets" . | nindent 6 }}
+      containers:
+        - name: auth-broker
+          image: "{{ include "helm-law-scraw.image" (dict "repository" .Values.images.authBroker.repository "tag" .Values.images.authBroker.tag "registry" $.Values.registry) }}"
+          imagePullPolicy: {{ .Values.images.authBroker.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.authBroker.service.targetPort }}
+          env:
+            - name: LEGAL_AUTH_BROKER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.authBroker.secretName }}
+                  key: broker-token
+            - name: LEGAL_AUTH_JAR_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.authBroker.secretName }}
+                  key: jar-key
+            - name: LEGAL_AUTH_VNC_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.authBroker.secretName }}
+                  key: vnc-password
+            - name: LEGAL_AUTH_CRAWL_PROXY_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.authBroker.identitySecretName }}
+                  key: crawl_proxy_url
+            - name: LEGAL_AUTH_LOGIN_PROXY_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.authBroker.identitySecretName }}
+                  key: login_proxy_url
+            - name: RUSTFS_ENDPOINT
+              value: {{ .Values.authBroker.rustfs.endpoint | quote }}
+            - name: RUSTFS_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.legalSources.secretName }}
+                  key: rustfs-access-key
+            - name: RUSTFS_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.legalSources.secretName }}
+                  key: rustfs-secret-key
+            - name: RUSTFS_REGION
+              value: {{ .Values.authBroker.rustfs.region | quote }}
+            - name: LAWS_BUCKET
+              value: {{ .Values.authBroker.lawsBucket | quote }}
+            - name: PG_HOST
+              value: {{ .Values.authBroker.postgres.host | quote }}
+            - name: PG_PORT
+              value: {{ .Values.authBroker.postgres.port | quote }}
+            - name: PG_DATABASE
+              value: {{ .Values.authBroker.postgres.database | quote }}
+            - name: PG_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.authBroker.postgres.secretName }}
+                  key: {{ .Values.authBroker.postgres.userKey }}
+            - name: PG_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.authBroker.postgres.secretName }}
+                  key: {{ .Values.authBroker.postgres.passwordKey }}
+          args: ["node", "bin/legal-auth-broker.mjs", "serve", "--host", "0.0.0.0", "--port", {{ .Values.authBroker.service.targetPort | quote }}]
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          resources:
+            {{- toYaml .Values.authBroker.resources | nindent 12 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "helm-law-scraw.fullname" . }}-auth-broker
+  labels:
+    {{- include "helm-law-scraw.labels" . | nindent 4 }}
+    app.kubernetes.io/component: auth-broker
+spec:
+  type: {{ .Values.authBroker.service.type }}
+  ports:
+    - name: http
+      port: {{ .Values.authBroker.service.port }}
+      targetPort: http
+  selector:
+    {{- include "helm-law-scraw.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: auth-broker
+{{- end }}
