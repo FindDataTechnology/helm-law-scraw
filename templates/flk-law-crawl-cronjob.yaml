@@ -1,9 +1,17 @@
+{{- /*
+IN-SERVICE CronJob (suspend=false): xinru live truth, zero behavior change.
+Name/labels/image/pullSecrets mirror the live object verbatim; the image is
+the Harbor registry-mirror build (NOT ccr) and keeps its harbor-lawcraw-pull
+pull secret. Do not point this at images.legalSources - the in-service flk
+chain must not move with the legal-sources waves.
+*/ -}}
 apiVersion: batch/v1
 kind: CronJob
 metadata:
-  name: {{ include "helm-law-scraw.fullname" . }}-flk-law-crawl
+  name: flk-law-crawl
   labels:
-    {{- include "helm-law-scraw.labels" . | nindent 4 }}
+    app.kubernetes.io/name: flk-law-crawl
+    app.kubernetes.io/part-of: finddata
 spec:
   schedule: {{ .Values.flkLawCrawl.schedule | quote }}
   suspend: {{ .Values.flkLawCrawl.suspend }}
@@ -18,14 +26,18 @@ spec:
       template:
         metadata:
           labels:
-            {{- include "helm-law-scraw.selectorLabels" . | nindent 12 }}
-            app.kubernetes.io/component: flk-law-crawl
+            app.kubernetes.io/name: flk-law-crawl
         spec:
-          {{- include "helm-law-scraw.imagePullSecrets" . | nindent 10 }}
+          {{- with .Values.images.flkLawCrawl.imagePullSecrets }}
+          imagePullSecrets:
+            {{- range . }}
+            - name: {{ . }}
+            {{- end }}
+          {{- end }}
           restartPolicy: OnFailure
           containers:
             - name: crawler
-              image: "{{ include "helm-law-scraw.image" (dict "repository" .Values.images.flkLawCrawl.repository "tag" .Values.images.flkLawCrawl.tag "registry" $.Values.registry) }}"
+              image: "{{ include "helm-law-scraw.image" (dict "registry" .Values.images.flkLawCrawl.registry "repository" .Values.images.flkLawCrawl.repository "tag" .Values.images.flkLawCrawl.tag) }}"
               imagePullPolicy: {{ .Values.images.flkLawCrawl.pullPolicy }}
               env:
                 - name: RUSTFS_ENDPOINT

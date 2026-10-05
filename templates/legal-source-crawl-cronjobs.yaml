@@ -1,12 +1,27 @@
+{{- /*
+One CronJob per entry under legalSources.sources. Object names are the bare
+source keys (rmfyalk-case-crawl, ..., flk-law-backfill) to match the xinru
+live inventory verbatim - NO release prefix. Images come from
+images.legalSources (ccr registry, pinned sha); per-source `image` overrides
+the repository/tag while keeping the registry (rmfyalk runs the auth-broker
+image). No imagePullSecrets: nodes already hold ccr credentials.
+*/ -}}
 {{- range $sourceId, $source := .Values.legalSources.sources }}
+{{- $repo := $.Values.images.legalSources.repository }}
+{{- $tag := $.Values.images.legalSources.tag }}
+{{- with $source.image }}
+{{- $repo = .repository }}
+{{- $tag = .tag }}
+{{- end }}
+{{- $cronName := $source.name | default $sourceId }}
 ---
 apiVersion: batch/v1
 kind: CronJob
 metadata:
-  name: {{ include "helm-law-scraw.fullname" $ }}-{{ $sourceId }}
+  name: {{ $cronName }}
   labels:
-    {{- include "helm-law-scraw.labels" $ | nindent 4 }}
-    app.kubernetes.io/component: legal-source-crawl
+    app.kubernetes.io/name: {{ $cronName }}
+    app.kubernetes.io/part-of: finddata
 spec:
   schedule: {{ $source.schedule | quote }}
   suspend: {{ $source.suspend }}
@@ -21,36 +36,23 @@ spec:
       template:
         metadata:
           labels:
-            {{- include "helm-law-scraw.selectorLabels" $ | nindent 12 }}
-            app.kubernetes.io/component: legal-source-crawl
+            app.kubernetes.io/name: {{ $cronName }}
+            {{- if $source.sourceLabel }}
             legal.finddata.io/source: {{ $sourceId }}
+            {{- end }}
+            {{- with $source.podLabels }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
         spec:
-          {{- include "helm-law-scraw.imagePullSecrets" $ | nindent 10 }}
           restartPolicy: OnFailure
           containers:
             - name: crawler
-              image: "{{ include "helm-law-scraw.image" (dict "repository" $.Values.images.flkLawCrawl.repository "tag" $.Values.images.flkLawCrawl.tag "registry" $.Values.registry) }}"
-              imagePullPolicy: {{ $.Values.images.flkLawCrawl.pullPolicy }}
+              image: "{{ include "helm-law-scraw.image" (dict "registry" $.Values.images.legalSources.registry "repository" $repo "tag" $tag) }}"
+              imagePullPolicy: {{ $.Values.images.legalSources.pullPolicy }}
               env:
-                - name: RUSTFS_ENDPOINT
-                  value: {{ $.Values.legalSources.rustfs.endpoint | quote }}
-                - name: RUSTFS_ACCESS_KEY
-                  valueFrom:
-                    secretKeyRef:
-                      name: {{ $.Values.legalSources.secretName }}
-                      key: rustfs-access-key
-                - name: RUSTFS_SECRET_KEY
-                  valueFrom:
-                    secretKeyRef:
-                      name: {{ $.Values.legalSources.secretName }}
-                      key: rustfs-secret-key
-                - name: RUSTFS_REGION
-                  value: {{ $.Values.legalSources.rustfs.region | quote }}
-                - name: LAWS_BUCKET
-                  value: {{ $.Values.legalSources.lawsBucket | quote }}
-                {{- if $source.proxyEnvName }}
-                - name: {{ $source.proxyEnvName }}
-                  value: {{ $source.proxyEnvValue | default "" | quote }}
+                {{- include "helm-law-scraw.legalRustfsEnv" $.Values.legalSources | nindent 16 }}
+                {{- with $source.extraEnv }}
+                {{- toYaml . | nindent 16 }}
                 {{- end }}
               command:
 {{ toYaml $source.command | indent 16 }}

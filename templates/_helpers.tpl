@@ -109,3 +109,49 @@ runner REDIS_URL: explicit value or in-chart redis master service.
 {{- printf "redis://%s-redis-master:6379/0" .Release.Name -}}
 {{- end -}}
 {{- end -}}
+
+{{/*
+RustFS + bucket env block shared by legal-sources crawls/loaders/report.
+Context: .Values.legalSources
+*/}}
+{{- define "helm-law-scraw.legalRustfsEnv" -}}
+- name: RUSTFS_ENDPOINT
+  value: {{ .rustfs.endpoint | quote }}
+- name: RUSTFS_ACCESS_KEY
+  valueFrom:
+    secretKeyRef:
+      name: {{ .secretName }}
+      key: rustfs-access-key
+- name: RUSTFS_SECRET_KEY
+  valueFrom:
+    secretKeyRef:
+      name: {{ .secretName }}
+      key: rustfs-secret-key
+- name: RUSTFS_REGION
+  value: {{ .rustfs.region | quote }}
+- name: LAWS_BUCKET
+  value: {{ .lawsBucket | quote }}
+{{- end -}}
+
+{{/*
+PG env block shared by legal-sources loaders + report.
+Context: .Values.legalSources
+*/}}
+{{- define "helm-law-scraw.legalPgEnv" -}}
+- name: PG_HOST
+  value: {{ .postgres.host | quote }}
+- name: PG_PORT
+  value: {{ .postgres.port | quote }}
+- name: PG_DATABASE
+  value: {{ .postgres.database | quote }}
+- name: PG_USER
+  valueFrom:
+    secretKeyRef:
+      name: {{ .postgres.secretName }}
+      key: {{ .postgres.userKey }}
+- name: PG_PASSWORD
+  valueFrom:
+    secretKeyRef:
+      name: {{ .postgres.secretName }}
+      key: {{ .postgres.passwordKey }}
+{{- end -}}

@@ -1,3 +1,4 @@
+{{- if .Values.scrapyd.enabled }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -54,3 +55,4 @@ spec:
   selector:
     {{- include "helm-law-scraw.selectorLabels" . | nindent 4 }}
     app.kubernetes.io/component: scrapyd
+{{- end }}

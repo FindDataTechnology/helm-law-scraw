@@ -1,27 +1,32 @@
+{{- /*
+lease-api Deployment + Service, converged to the xinru live objects named
+`legal-auth-broker` (no release prefix; the crawlers reach it at
+http://legal-auth-broker.scraw). Image is the Harbor registry-mirror build,
+NOT images.legalSources. Live pod carries NO imagePullSecrets.
+*/ -}}
 {{- if .Values.authBroker.enabled }}
+{{- $brokerName := .Values.authBroker.name | default "legal-auth-broker" }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "helm-law-scraw.fullname" . }}-auth-broker
+  name: {{ $brokerName }}
   labels:
-    {{- include "helm-law-scraw.labels" . | nindent 4 }}
-    app.kubernetes.io/component: auth-broker
+    app.kubernetes.io/name: {{ $brokerName }}
+    app.kubernetes.io/part-of: finddata
 spec:
   replicas: {{ .Values.authBroker.replicas }}
   selector:
     matchLabels:
-      {{- include "helm-law-scraw.selectorLabels" . | nindent 6 }}
-      app.kubernetes.io/component: auth-broker
+      app.kubernetes.io/name: {{ $brokerName }}
   template:
     metadata:
       labels:
-        {{- include "helm-law-scraw.selectorLabels" . | nindent 8 }}
-        app.kubernetes.io/component: auth-broker
+        app.kubernetes.io/name: {{ $brokerName }}
+        app.kubernetes.io/part-of: finddata
     spec:
-      {{- include "helm-law-scraw.imagePullSecrets" . | nindent 6 }}
       containers:
-        - name: auth-broker
-          image: "{{ include "helm-law-scraw.image" (dict "repository" .Values.images.authBroker.repository "tag" .Values.images.authBroker.tag "registry" $.Values.registry) }}"
+        - name: lease-api
+          image: "{{ include "helm-law-scraw.image" (dict "registry" .Values.images.authBroker.registry "repository" .Values.images.authBroker.repository "tag" .Values.images.authBroker.tag) }}"
           imagePullPolicy: {{ .Values.images.authBroker.pullPolicy }}
           ports:
             - name: http
@@ -42,16 +47,6 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.authBroker.secretName }}
                   key: vnc-password
-            - name: LEGAL_AUTH_CRAWL_PROXY_URL
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.authBroker.identitySecretName }}
-                  key: crawl_proxy_url
-            - name: LEGAL_AUTH_LOGIN_PROXY_URL
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.authBroker.identitySecretName }}
-                  key: login_proxy_url
             - name: RUSTFS_ENDPOINT
               value: {{ .Values.authBroker.rustfs.endpoint | quote }}
             - name: RUSTFS_ACCESS_KEY
@@ -84,6 +79,16 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.authBroker.postgres.secretName }}
                   key: {{ .Values.authBroker.postgres.passwordKey }}
+            - name: LEGAL_AUTH_CRAWL_PROXY_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.authBroker.identitySecretName }}
+                  key: crawl_proxy_url
+            - name: LEGAL_AUTH_LOGIN_PROXY_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.authBroker.identitySecretName }}
+                  key: login_proxy_url
           args: ["node", "bin/legal-auth-broker.mjs", "serve", "--host", "0.0.0.0", "--port", {{ .Values.authBroker.service.targetPort | quote }}]
           readinessProbe:
             httpGet:
@@ -103,10 +108,10 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "helm-law-scraw.fullname" . }}-auth-broker
+  name: {{ $brokerName }}
   labels:
-    {{- include "helm-law-scraw.labels" . | nindent 4 }}
-    app.kubernetes.io/component: auth-broker
+    app.kubernetes.io/name: {{ $brokerName }}
+    app.kubernetes.io/part-of: finddata
 spec:
   type: {{ .Values.authBroker.service.type }}
   ports:
@@ -114,6 +119,5 @@ spec:
       port: {{ .Values.authBroker.service.port }}
       targetPort: http
   selector:
-    {{- include "helm-law-scraw.selectorLabels" . | nindent 4 }}
-    app.kubernetes.io/component: auth-broker
+    app.kubernetes.io/name: {{ $brokerName }}
 {{- end }}

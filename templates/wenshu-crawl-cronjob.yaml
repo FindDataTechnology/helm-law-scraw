@@ -1,3 +1,4 @@
+{{- if .Values.wenshuCrawl.enabled }}
 apiVersion: batch/v1
 kind: CronJob
 metadata:
@@ -67,3 +68,4 @@ spec:
                   value: {{ .Values.wenshuCrawl.proxyUrl | quote }}
                 {{- end }}
               command: ["node", "bin/wenshu-crawl.mjs"]
+{{- end }}

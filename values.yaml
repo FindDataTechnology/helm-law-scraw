@@ -1,14 +1,19 @@
 # helm-law-scraw values
 #
-# Scrapyd + law-crawling stack with Redis and PostgreSQL.
-# Image reference pattern: <registry>/<repository>:<tag>
+# Converged to the xinru cluster (k3s, namespace scraw) live inventory as of
+# 2026-10-06. Chart-owned live objects: flk-law-crawl CronJob, legal-auth-broker
+# Deployment+Service, the 5 wave-1 legal-source crawl CronJobs, flk-law-backfill,
+# the 5 per-source load CronJobs and legal-sources-report. scrapyd,
+# scraw-law-contracts, wenshu-crawl, redis and postgresql are DISABLED here
+# (nothing live on xinru); flip their enabled flags only for a cluster that has
+# them. See APPLY-NOTES.md for the standard render command and wave flips.
 #
-# Default registry is Docker Hub. Override for private registries:
-#   helm install ... --set registry=myregistry.example.com:5000/myproject
+# Image reference pattern: <registry>/<repository>:<tag>. Each images.* entry
+# carries its own registry override; the top-level `registry` is legacy and only
+# used by the disabled legacy templates.
 
-# --- Image registry ---
-# Prepended to all image.repository values. Leave empty for bare image names.
-# Example: "docker.io" -> images become "docker.io/scraw-ops-scrapyd:latest"
+# --- Image registry (legacy; per-image registry overrides take precedence) ---
+# Prepended to image.repository values that have no own `registry` key.
 registry: docker.io
 
 # --- Image pull credentials (optional) ---
@@ -24,9 +29,38 @@ nameOverride: ""
 fullnameOverride: ""
 
 images:
+  # Every entry supports its own `registry` override; when set it wins over the
+  # legacy top-level `registry`. The xinru live truth (2026-10-06) is:
+  #   - in-change legal-sources objects run images from ccr.ccs.tencentyun.com
+  #     (nodes carry ccr credentials; NO imagePullSecrets on these pods)
+  #   - the in-service flk chain keeps its Harbor/registry-mirror images from
+  #     100.64.0.8:30880 (project name with underscore: lawcraw_business)
+  legalSources:
+    # fd-law-data images for the 5 wave-1 crawls, flk-law-backfill, the 5 loads
+    # and legal-sources-report. Bump tag per wave (see APPLY-NOTES.md).
+    registry: ccr.ccs.tencentyun.com
+    repository: lawcraw-business/fd-law-data
+    tag: sha-d3e3e55
+    pullPolicy: IfNotPresent
+  flkLawCrawl:
+    # IN-SERVICE (suspend=false) daily flk incremental crawl. Converged to the
+    # xinru live image; changing this must match the cluster exactly or the
+    # in-service chain breaks on next apply.
+    registry: 100.64.0.8:30880
+    repository: lawcraw_business/fd-law-data
+    tag: sha-e78d96e
+    pullPolicy: IfNotPresent
+    imagePullSecrets:
+      - harbor-lawcraw-pull
+  authBroker:
+    # lease-api Deployment; live runs the Harbor registry mirror image.
+    registry: 100.64.0.8:30880
+    repository: lawcraw_business/legal-auth-broker
+    tag: sha-b726e1f
+    pullPolicy: IfNotPresent
+  # --- legacy components, disabled on xinru (nothing live) ---
   scrapyd:
-    # Full image path WITHOUT the registry prefix (registry is prepended automatically).
-    # Example: registry=docker.io, repository=scraw-ops-scrapyd -> docker.io/scraw-ops-scrapyd:latest
+    # Full image path WITHOUT the registry prefix (top-level registry is prepended).
     repository: scraw-ops-scrapyd
     tag: latest
     pullPolicy: Always
@@ -35,25 +69,16 @@ images:
     # Pinned to the MinIO-enabled build (commit b9a72ee). Bump on the next image.
     tag: sha-b9a72ee
     pullPolicy: Always
-  flkLawCrawl:
-    # Built from fd-law-data/ via cheap-1 buildkit; pushed to the lawcraw_business
-    # project (the only Harbor project with working push credentials as of
-    # 2026-09-18). Relocate to the public finddata/ project once current Harbor
-    # admin credentials are available.
-    repository: lawcraw_business/fd-law-data
-    tag: v0.1.9
-    pullPolicy: IfNotPresent
   wenshuCrawl:
     # Playwright image built from fd-law-data/Dockerfile.wenshu (browsers included).
     repository: lawcraw_business/fd-law-data-wenshu
     tag: v0.1.0
     pullPolicy: IfNotPresent
-  authBroker:
-    repository: lawcraw_business/legal-auth-broker
-    tag: sha-b726e1f
-    pullPolicy: IfNotPresent
 
 scrapyd:
+  # Disabled on xinru: no scrapyd Deployment/Service/ConfigMap exists in the
+  # live cluster (2026-10-06). Leave false so a chart apply cannot create one.
+  enabled: false
   replicas: 1
   redisUrl: ""        # empty -> redis://<release>-redis-master:6379/0 (in-chart redis)
   config:
@@ -62,6 +87,8 @@ scrapyd:
     dbsToKeep: "5"
 
 lawContracts:
+  # Disabled on xinru: no law-contracts CronJob/PVC exists in the live cluster.
+  enabled: false
   spider: samr_contracts
   schedule: "0 2 * * *"     # daily 02:00
   suspend: false
@@ -93,11 +120,13 @@ minio:
 # `laws` bucket `incremental/` prefix. Crawler holds NO PG credentials — the
 # loader (flk-load.mjs) runs separately on the data machine. rustfs credentials
 # are placeholders; supply real values via local-only values, never committed.
+# IN-SERVICE on xinru (suspend=false): every field here matches the live
+# CronJob verbatim; change only in lockstep with the cluster.
 flkLawCrawl:
-  schedule: "30 2 * * *"    # daily 02:30 (after law-contracts)
-  suspend: false
+  schedule: "30 2 * * *"    # daily 02:30; == live
+  suspend: false            # == live; NEVER flip without the wave manual
   concurrencyPolicy: Forbid
-  activeDeadlineSeconds: 14400   # 4 h is generous for daily increments
+  activeDeadlineSeconds: 14400   # == live
   secretName: flk-law-crawl-credentials
   lawsBucket: laws
   rateMs: 1100
@@ -108,62 +137,160 @@ flkLawCrawl:
     region: us-east-1
 
 # --- wave-1 authoritative legal sources (fd-law-data) ---
-# Each source writes legal-sources/<id>/ in the laws bucket; loaders run on the
-# data machine. CronJobs are suspended by default: pin a Jenkins sha image and
-# validate a local dry run before enabling. Proxy/account values, when needed,
-# belong in local-only ArgoCD values or a Secret, never in this chart.
+# Converged to the xinru live inventory (2026-10-06):
+#   sources  = 5 wave-1 crawl CronJobs + flk-law-backfill (names = bare keys,
+#              no release prefix)
+#   loaders  = the 5 per-source load CronJobs (09-24 manual apply, now charted)
+#   report   = legal-sources-report CronJob (09-24 manual apply, now charted)
+# Crawl/loader/report images come from images.legalSources (ccr + pinned sha).
+# Crons ship suspended; flip suspend per wave (see APPLY-NOTES.md). Credentials
+# stay in Secrets; never commit real values to this chart.
 legalSources:
   secretName: flk-law-crawl-credentials
   lawsBucket: laws
   rustfs:
     endpoint: http://100.64.0.11:9000
     region: us-east-1
+  postgres:
+    # PG env for loaders + report (report gains PG in this change: the new
+    # report code reads law_db; live report has no PG env yet - accepted diff).
+    host: 100.64.0.5
+    port: "5432"
+    database: law_db
+    secretName: flk-law-pg-credentials
+    userKey: pg-user
+    passwordKey: pg-password
   sources:
     rmfyalk-case-library:
+      name: rmfyalk-case-crawl
       schedule: "10 3 * * *"
       suspend: true
       concurrencyPolicy: Forbid
       activeDeadlineSeconds: 21600
-      command: ["node", "bin/rmfyalk-crawl.mjs", "--rate-ms", "1100"]
-      proxyEnvName: RMFYALK_CASE_LIBRARY_PROXY_URL
-      proxyEnvValue: ""
+      # Live runs the auth-broker image (browser runtime bundled), pinned to
+      # the account identity; auth envs come from Secrets.
+      sourceLabel: true
+      podLabels:
+        legal.finddata.io/account: acct001
+      image:
+        repository: lawcraw-business/legal-auth-broker
+        tag: sha-4b79ec5
+      command:
+        - node
+        - bin/rmfyalk-crawl.mjs
+        - --account-id
+        - acct001
+        - --auth-broker
+        - http://legal-auth-broker.scraw
+        - --rate-ms
+        - "1100"
+      extraEnv:
+        - name: LEGAL_AUTH_BROKER_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: legal-auth-broker
+              key: broker-token
+        - name: LEGAL_AUTH_JAR_KEY
+          valueFrom:
+            secretKeyRef:
+              name: legal-auth-broker
+              key: jar-key
+        - name: LEGAL_AUTH_CRAWL_PROXY_URL
+          valueFrom:
+            secretKeyRef:
+              name: legal-identity-rmfyalk-acct001
+              key: crawl_proxy_url
+        - name: LEGAL_AUTH_LOGIN_PROXY_URL
+          valueFrom:
+            secretKeyRef:
+              name: legal-identity-rmfyalk-acct001
+              key: login_proxy_url
     mfa-treaty-library:
+      name: mfa-treaty-crawl
       schedule: "20 3 * * *"
       suspend: true
       concurrencyPolicy: Forbid
-      activeDeadlineSeconds: 14400
+      activeDeadlineSeconds: 28800
+      sourceLabel: true
       command: ["node", "bin/mfa-treaty-crawl.mjs", "--rate-ms", "1100"]
     gov-rules-library:
+      name: gov-rules-crawl
       schedule: "30 3 * * *"
       suspend: true
       concurrencyPolicy: Forbid
       activeDeadlineSeconds: 14400
+      sourceLabel: true
       command: ["node", "bin/gov-rules-crawl.mjs", "--rate-ms", "1100"]
     party-regulation-library:
+      name: party-regulation-crawl
       schedule: "40 3 * * *"
       suspend: true
       concurrencyPolicy: Forbid
       activeDeadlineSeconds: 14400
+      sourceLabel: true
       command: ["node", "bin/party-regulation-crawl.mjs", "--rate-ms", "1100"]
     ccdi-supervisory-regulations:
+      name: ccdi-supervisory-crawl
       schedule: "50 3 * * *"
       suspend: true
       concurrencyPolicy: Forbid
-      activeDeadlineSeconds: 14400
+      activeDeadlineSeconds: 28800
+      sourceLabel: true
       command: ["node", "bin/ccdi-supervisory-crawl.mjs", "--rate-ms", "1100"]
     flk-law-backfill:
+      name: flk-law-backfill
       schedule: "0 */4 * * *"
       suspend: true
       concurrencyPolicy: Forbid
       activeDeadlineSeconds: 21600
+      # Live backfill pod carries no legal.finddata.io/source label.
+      sourceLabel: false
       command:
         - node
         - bin/flk-crawl.mjs
         - --backfill
-        - --until
-        - "2026-09-23"
         - --batch-days
         - "365"
+      extraEnv:
+        - name: FLK_PAGE_SIZE
+          value: "100"
+        - name: FLK_RATE_MS
+          value: "1100"
+  loaders:
+    # One CronJob per source; names match live (no release prefix). Container
+    # name `loader`, OnFailure, Forbid, activeDeadlineSeconds 7200 (default).
+    rmfyalk-case-load:
+      schedule: "30 5 * * *"
+      suspend: true
+      source: rmfyalk-case-library
+      command: ["node", "bin/rmfyalk-load.mjs", "--source", "rmfyalk-case-library"]
+    mfa-treaty-load:
+      schedule: "40 4 * * *"
+      suspend: true
+      source: mfa-treaty-library
+      command: ["node", "bin/mfa-treaty-load.mjs", "--source", "mfa-treaty-library"]
+    gov-rules-load:
+      schedule: "50 4 * * *"
+      suspend: true
+      source: gov-rules-library
+      command: ["node", "bin/gov-rules-load.mjs", "--source", "gov-rules-library"]
+    party-regulation-load:
+      schedule: "0 5 * * *"
+      suspend: true
+      source: party-regulation-library
+      command: ["node", "bin/party-regulation-load.mjs", "--source", "party-regulation-library"]
+    ccdi-supervisory-load:
+      schedule: "10 5 * * *"
+      suspend: true
+      source: ccdi-supervisory-regulations
+      command: ["node", "bin/ccdi-supervisory-load.mjs", "--source", "ccdi-supervisory-regulations"]
+  report:
+    name: legal-sources-report
+    schedule: "0 6 * * *"
+    suspend: false
+    concurrencyPolicy: Forbid
+    activeDeadlineSeconds: 1800
+    command: ["node", "bin/legal-sources-report.mjs"]
 
 # --- legal Auth Broker (login/session lease API) ---
 # Provides the isolated browser login runtime and the crawler-facing lease API.
@@ -171,6 +298,9 @@ legalSources:
 # are stored in this chart.
 authBroker:
   enabled: true
+  # Live object name on xinru is `legal-auth-broker` (no release prefix); the
+  # crawlers reach it at http://legal-auth-broker.scraw.
+  name: legal-auth-broker
   replicas: 1
   secretName: legal-auth-broker
   identitySecretName: legal-identity-rmfyalk-acct001
@@ -210,6 +340,9 @@ authBroker:
 # browser on the operator Mac; see fd-law-data/README "wenshu". Flipping this to
 # false requires sticky egress (design.md D6) plus a resumed account.
 wenshuCrawl:
+  # Disabled on xinru: no wenshu-crawl CronJob exists in the live cluster (the
+  # supported shape is the warm browser on the operator Mac; see README).
+  enabled: false
   schedule: "0 17 * * *"        # 01:00 Asia/Shanghai (nodes run UTC)
   suspend: true
   concurrencyPolicy: Forbid
@@ -227,7 +360,8 @@ wenshuCrawl:
 
 # Bitnami subcharts
 redis:
-  enabled: true
+  # Disabled on xinru: no redis StatefulSet/Service exists in the live cluster.
+  enabled: false
   architecture: standalone
   # Auth is disabled by default because the chart's Redis URL has no password.
   # If you enable auth, update _helpers.tpl to include the password in the URL.
@@ -235,7 +369,9 @@ redis:
     enabled: false
 
 postgresql:
-  enabled: true
+  # Disabled on xinru: PG lives off-cluster (100.64.0.5, credentials in
+  # flk-law-pg-credentials); no in-chart postgresql exists in the live cluster.
+  enabled: false
   auth:
     # Set a password or leave empty; Bitnami generates one if empty.
     postgresPassword: "changeme"
