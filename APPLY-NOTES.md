@@ -13,6 +13,19 @@ helm template law-craw /Users/chengsishi/finddata/helm-law-scraw --namespace scr
 helm lint /Users/chengsishi/finddata/helm-law-scraw
 ```
 
+## ⚠️ Namespace rule (2026-10-06 wave-0 lesson)
+
+`helm template` output carries **NO namespace** (active templates render bare
+objects). Applying the render without a namespace flag creates duplicate
+objects in `default` (this happened on wave-0 and was cleaned via
+`kubectl delete -l app.kubernetes.io/part-of=finddata -n default`).
+ALWAYS apply with an explicit namespace:
+
+```bash
+helm template law-craw /Users/chengsishi/finddata/helm-law-scraw --namespace scraw \
+  | sudo k3s kubectl apply -n scraw -f -       # --dry-run=server first on any new shape
+```
+
 Rendered object set (15 objects) == chart-owned live inventory:
 
 | kind      | name |
