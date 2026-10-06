@@ -40,7 +40,7 @@ images:
     # and legal-sources-report. Bump tag per wave (see APPLY-NOTES.md).
     registry: ccr.ccs.tencentyun.com
     repository: lawcraw-business/fd-law-data
-    tag: sha-d3e3e55
+    tag: sha-8433e3d
     pullPolicy: IfNotPresent
   flkLawCrawl:
     # IN-SERVICE (suspend=false) daily flk incremental crawl. Converged to the
@@ -133,7 +133,7 @@ flkLawCrawl:
   pageSize: 100
   lookbackDays: 7
   rustfs:
-    endpoint: http://100.64.0.11:9000   # tailnet-internal RustFS (chart installs target the tailnet cluster)
+    endpoint: http://100.64.0.5:9000   # tailnet-internal RustFS (chart installs target the tailnet cluster)
     region: us-east-1
 
 # --- wave-1 authoritative legal sources (fd-law-data) ---
@@ -149,7 +149,7 @@ legalSources:
   secretName: flk-law-crawl-credentials
   lawsBucket: laws
   rustfs:
-    endpoint: http://100.64.0.11:9000
+    endpoint: http://100.64.0.5:9000
     region: us-east-1
   postgres:
     # PG env for loaders + report (report gains PG in this change: the new
@@ -305,7 +305,7 @@ authBroker:
   secretName: legal-auth-broker
   identitySecretName: legal-identity-rmfyalk-acct001
   rustfs:
-    endpoint: http://100.64.0.11:9000
+    endpoint: http://100.64.0.5:9000
     region: us-east-1
   lawsBucket: laws
   postgres:
@@ -355,7 +355,7 @@ wenshuCrawl:
   budgetMs: "68400000"          # 19 h internal budget (string to avoid float rendering)
   proxyUrl: ""                  # sticky exit IP via fd-proxy-service (design.md D6); "" = direct
   rustfs:
-    endpoint: http://100.64.0.11:9000
+    endpoint: http://100.64.0.5:9000
     region: us-east-1
 
 # Bitnami subcharts
