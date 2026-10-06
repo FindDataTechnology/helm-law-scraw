@@ -208,7 +208,7 @@ legalSources:
     mfa-treaty-library:
       name: mfa-treaty-crawl
       schedule: "20 3 * * *"
-      suspend: true
+      suspend: false
       concurrencyPolicy: Forbid
       activeDeadlineSeconds: 28800
       sourceLabel: true
@@ -216,7 +216,7 @@ legalSources:
     gov-rules-library:
       name: gov-rules-crawl
       schedule: "30 3 * * *"
-      suspend: true
+      suspend: false
       concurrencyPolicy: Forbid
       activeDeadlineSeconds: 14400
       sourceLabel: true
@@ -224,7 +224,7 @@ legalSources:
     party-regulation-library:
       name: party-regulation-crawl
       schedule: "40 3 * * *"
-      suspend: true
+      suspend: false
       concurrencyPolicy: Forbid
       activeDeadlineSeconds: 14400
       sourceLabel: true
@@ -266,17 +266,17 @@ legalSources:
       command: ["node", "bin/rmfyalk-load.mjs", "--source", "rmfyalk-case-library"]
     mfa-treaty-load:
       schedule: "40 4 * * *"
-      suspend: true
+      suspend: false
       source: mfa-treaty-library
       command: ["node", "bin/mfa-treaty-load.mjs", "--source", "mfa-treaty-library"]
     gov-rules-load:
       schedule: "50 4 * * *"
-      suspend: true
+      suspend: false
       source: gov-rules-library
       command: ["node", "bin/gov-rules-load.mjs", "--source", "gov-rules-library"]
     party-regulation-load:
       schedule: "0 5 * * *"
-      suspend: true
+      suspend: false
       source: party-regulation-library
       command: ["node", "bin/party-regulation-load.mjs", "--source", "party-regulation-library"]
     ccdi-supervisory-load:
