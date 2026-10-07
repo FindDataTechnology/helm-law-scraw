@@ -173,8 +173,10 @@ legalSources:
       podLabels:
         legal.finddata.io/account: acct001
       image:
-        repository: lawcraw-business/legal-auth-broker
-        tag: sha-4b79ec5
+        # rmfyalk crawl needs only bin/lib (main image); dual-mode platform session since sha-c14bb59.
+        registry: ccr.ccs.tencentyun.com
+        repository: lawcraw-business/fd-law-data
+        tag: sha-c14bb59
       command:
         - node
         - bin/rmfyalk-crawl.mjs
