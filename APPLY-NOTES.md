@@ -123,3 +123,11 @@ helm template law-craw . --namespace scraw \
   live.
 - Applying the chart does NOT create: scrapyd/law-contracts/wenshu/redis/
   postgresql objects (disabled), nor any external object (names verified).
+
+
+## 法律线宿主：xinru-server1（2026-10-07 迁移后）
+
+法律线全家驻 xinru-server1 scraw ns（独立 k3s、节点级 ccr 认证、docker.io 轩辕加速已配）。
+- 渲染：`helm template law-craw . --namespace scraw -f values-server1.yaml`
+- **runner_image 同步义务**：升级 `images.legalSources.tag` 时必须同步 `crawl_sources.runner_image`（dispatcher 触发的 Job 用登记值，不是 chart 值）——drill 4.2 曾因此跑旧镜像。
+- xinru 侧 13 个挂起 CronJob 为回退，稳定一周后清理。
