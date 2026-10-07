@@ -4,7 +4,10 @@
 legalSources:
   sources:
     rmfyalk-case-library:
-      suspend: false
+      # 2026-10-08: platform owns the trigger (crawl_sources.schedule 03:10;
+      # dispatcher injects the leased platform session). The broker-mode
+      # CronJob stays only as a manual fallback.
+      suspend: true
     mfa-treaty-library:
       suspend: false
     gov-rules-library:
