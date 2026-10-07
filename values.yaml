@@ -40,7 +40,7 @@ images:
     # and legal-sources-report. Bump tag per wave (see APPLY-NOTES.md).
     registry: ccr.ccs.tencentyun.com
     repository: lawcraw-business/fd-law-data
-    tag: sha-919f853
+    tag: sha-3ca3e8b
     pullPolicy: IfNotPresent
   flkLawCrawl:
     # IN-SERVICE (suspend=false) daily flk incremental crawl. Converged to the
