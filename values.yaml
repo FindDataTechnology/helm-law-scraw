@@ -174,9 +174,11 @@ legalSources:
         legal.finddata.io/account: acct001
       image:
         # rmfyalk crawl needs only bin/lib (main image); dual-mode platform session since sha-c14bb59.
+        # sha-9fdb6b1 adds curl (proxy-fetch shells out; missing curl made every
+        # proxied list request fail "spawn curl ENOENT" -> listed=0 fake success).
         registry: ccr.ccs.tencentyun.com
         repository: lawcraw-business/fd-law-data
-        tag: sha-c14bb59
+        tag: sha-9fdb6b1
       command:
         - node
         - bin/rmfyalk-crawl.mjs
