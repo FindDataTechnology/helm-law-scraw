@@ -30,13 +30,16 @@ spec:
             app.kubernetes.io/name: {{ $loadId }}
             legal.finddata.io/source: {{ $load.source }}
         spec:
+          {{- include "helm-law-scraw.imagePullSecrets" $ | nindent 10 }}
           restartPolicy: OnFailure
           containers:
             - name: loader
               image: "{{ include "helm-law-scraw.image" (dict "registry" $.Values.images.legalSources.registry "repository" $.Values.images.legalSources.repository "tag" $.Values.images.legalSources.tag) }}"
               imagePullPolicy: {{ $.Values.images.legalSources.pullPolicy }}
+              {{- include "helm-law-scraw.legalResources" $.Values.legalSources | nindent 14 }}
               env:
                 {{- include "helm-law-scraw.legalRustfsEnv" $.Values.legalSources | nindent 16 }}
+                {{- include "helm-law-scraw.legalTelemetryEnv" (dict "telemetry" $.Values.legalSources.telemetry "imageTag" $.Values.images.legalSources.tag) | nindent 16 }}
                 {{- include "helm-law-scraw.legalPgEnv" $.Values.legalSources | nindent 16 }}
               command:
 {{ toYaml $load.command | indent 16 }}
@@ -64,13 +67,16 @@ spec:
           labels:
             app.kubernetes.io/name: {{ $report.name | default "legal-sources-report" }}
         spec:
+          {{- include "helm-law-scraw.imagePullSecrets" $ | nindent 10 }}
           restartPolicy: OnFailure
           containers:
             - name: report
               image: "{{ include "helm-law-scraw.image" (dict "registry" .Values.images.legalSources.registry "repository" .Values.images.legalSources.repository "tag" .Values.images.legalSources.tag) }}"
               imagePullPolicy: {{ .Values.images.legalSources.pullPolicy }}
+              {{- include "helm-law-scraw.legalResources" .Values.legalSources | nindent 14 }}
               env:
                 {{- include "helm-law-scraw.legalRustfsEnv" .Values.legalSources | nindent 16 }}
+                {{- include "helm-law-scraw.legalTelemetryEnv" (dict "telemetry" .Values.legalSources.telemetry "imageTag" .Values.images.legalSources.tag) | nindent 16 }}
                 {{- include "helm-law-scraw.legalPgEnv" .Values.legalSources | nindent 16 }}
               command:
 {{ toYaml $report.command | indent 16 }}

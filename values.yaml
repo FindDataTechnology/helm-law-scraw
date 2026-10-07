@@ -40,7 +40,7 @@ images:
     # and legal-sources-report. Bump tag per wave (see APPLY-NOTES.md).
     registry: ccr.ccs.tencentyun.com
     repository: lawcraw-business/fd-law-data
-    tag: sha-8433e3d
+    tag: sha-919f853
     pullPolicy: IfNotPresent
   flkLawCrawl:
     # IN-SERVICE (suspend=false) daily flk incremental crawl. Converged to the
@@ -284,6 +284,16 @@ legalSources:
       suspend: true
       source: ccdi-supervisory-regulations
       command: ["node", "bin/ccdi-supervisory-load.mjs", "--source", "ccdi-supervisory-regulations"]
+  telemetry:
+    secretName: federation-db
+    urlKey: url
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 2Gi
   report:
     name: legal-sources-report
     schedule: "0 6 * * *"

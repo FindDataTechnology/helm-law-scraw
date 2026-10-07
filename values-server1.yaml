@@ -1,0 +1,30 @@
+# xinru-server1 安装 overlay — 法律线宿主（change legal-line-federation，用户裁定五机分布）
+# server1 节点已有 ccr 认证（registries.yaml）→ 无需 imageCredentials
+# 切换前全部 suspend；auth-broker 随线部署
+legalSources:
+  sources:
+    rmfyalk-case-library:
+      suspend: false
+    mfa-treaty-library:
+      suspend: false
+    gov-rules-library:
+      suspend: false
+    party-regulation-library:
+      suspend: false
+    ccdi-supervisory-regulations:
+      suspend: false
+  loaders:
+    rmfyalk-case-load:
+      suspend: false
+    mfa-treaty-load:
+      suspend: false
+    gov-rules-load:
+      suspend: false
+    party-regulation-load:
+      suspend: false
+    ccdi-supervisory-load:
+      suspend: false
+  report:
+    suspend: false
+flkLawCrawl:
+  suspend: false

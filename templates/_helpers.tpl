@@ -155,3 +155,30 @@ Context: .Values.legalSources
       name: {{ .postgres.secretName }}
       key: {{ .postgres.passwordKey }}
 {{- end -}}
+{{/*
+Telemetry env block shared by legal-sources crawls + loaders (crawl_runs direct report).
+Context: dict with telemetry + imageTag
+*/}}
+{{- define "helm-law-scraw.legalTelemetryEnv" -}}
+- name: FD_CRAWL_DB_URL
+  valueFrom:
+    secretKeyRef:
+      name: {{ .telemetry.secretName }}
+      key: {{ .telemetry.urlKey }}
+- name: FD_RUNNER_IMAGE_TAG
+  value: {{ .imageTag | quote }}
+{{- end -}}
+
+{{/*
+Resource limits hard gate for legal-line federation members (change legal-line-federation).
+Context: .Values.legalSources
+*/}}
+{{- define "helm-law-scraw.legalResources" -}}
+resources:
+  requests:
+    cpu: {{ .resources.requests.cpu }}
+    memory: {{ .resources.requests.memory }}
+  limits:
+    cpu: {{ .resources.limits.cpu }}
+    memory: {{ .resources.limits.memory }}
+{{- end -}}

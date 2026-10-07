@@ -44,13 +44,16 @@ spec:
             {{- toYaml . | nindent 12 }}
             {{- end }}
         spec:
+          {{- include "helm-law-scraw.imagePullSecrets" $ | nindent 10 }}
           restartPolicy: OnFailure
           containers:
             - name: crawler
               image: "{{ include "helm-law-scraw.image" (dict "registry" $.Values.images.legalSources.registry "repository" $repo "tag" $tag) }}"
               imagePullPolicy: {{ $.Values.images.legalSources.pullPolicy }}
+              {{- include "helm-law-scraw.legalResources" $.Values.legalSources | nindent 14 }}
               env:
                 {{- include "helm-law-scraw.legalRustfsEnv" $.Values.legalSources | nindent 16 }}
+                {{- include "helm-law-scraw.legalTelemetryEnv" (dict "telemetry" $.Values.legalSources.telemetry "imageTag" $.Values.images.legalSources.tag) | nindent 16 }}
                 {{- with $source.extraEnv }}
                 {{- toYaml . | nindent 16 }}
                 {{- end }}

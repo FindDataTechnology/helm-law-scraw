@@ -1,0 +1,31 @@
+# chengsi (tencent 集群) 安装 overlay — 法律线迁移（change legal-line-federation）
+# 切换前全部 suspend；imagePullSecrets 走 ccr-pull（节点无 ccr 认证）
+imageCredentials:
+  existingSecret: ccr-pull
+flkLawCrawl:
+  suspend: true
+legalSources:
+  sources:
+    rmfyalk-case-library:
+      suspend: true
+    mfa-treaty-library:
+      suspend: true
+    gov-rules-library:
+      suspend: true
+    party-regulation-library:
+      suspend: true
+    ccdi-supervisory-regulations:
+      suspend: true
+  loaders:
+    rmfyalk-case-load:
+      suspend: true
+    mfa-treaty-load:
+      suspend: true
+    gov-rules-load:
+      suspend: true
+    party-regulation-load:
+      suspend: true
+    ccdi-supervisory-load:
+      suspend: true
+  report:
+    suspend: true
