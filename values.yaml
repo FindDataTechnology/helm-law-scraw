@@ -176,9 +176,12 @@ legalSources:
         # rmfyalk crawl needs only bin/lib (main image); dual-mode platform session since sha-c14bb59.
         # sha-9fdb6b1 adds curl (proxy-fetch shells out; missing curl made every
         # proxied list request fail "spawn curl ENOENT" -> listed=0 fake success).
+        # sha-9eb5c72 carries identity_alias into crawl_runs.startRun (FD_ACCOUNT
+        # -> runs traceable to the leased identity). Built via server2 delta
+        # (GitHub billing blocks private-repo Actions).
         registry: ccr.ccs.tencentyun.com
         repository: lawcraw-business/fd-law-data
-        tag: sha-9fdb6b1
+        tag: sha-9eb5c72
       command:
         - node
         - bin/rmfyalk-crawl.mjs
