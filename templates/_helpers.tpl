@@ -167,6 +167,15 @@ Context: dict with telemetry + imageTag
       key: {{ .telemetry.urlKey }}
 - name: FD_RUNNER_IMAGE_TAG
   value: {{ .imageTag | quote }}
+# The telemetry writer's schema bootstrap (lib/telemetry.mjs ensureSchemaOnce)
+# runs DDL unless this flag is set. Chart-managed Jobs authenticate as
+# fd_platform, which owns no schema CREATE right, so without the flag every
+# start_run failed "permission denied for schema public" and was swallowed
+# after 3 retries — the crawls ran but Console never saw them (found
+# 2026-10-10 while verifying rmfyalk-incremental-identity). The platform
+# dispatcher already injects the same flag into its Jobs.
+- name: FD_SCHEMA_MANAGED
+  value: "1"
 {{- end -}}
 
 {{/*

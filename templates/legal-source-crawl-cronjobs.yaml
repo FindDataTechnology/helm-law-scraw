@@ -9,9 +9,11 @@ image). No imagePullSecrets: nodes already hold ccr credentials.
 {{- range $sourceId, $source := .Values.legalSources.sources }}
 {{- $repo := $.Values.images.legalSources.repository }}
 {{- $tag := $.Values.images.legalSources.tag }}
+{{- $registry := $.Values.images.legalSources.registry }}
 {{- with $source.image }}
 {{- $repo = .repository }}
 {{- $tag = .tag }}
+{{- $registry = .registry | default $registry }}
 {{- end }}
 {{- $cronName := $source.name | default $sourceId }}
 ---
@@ -48,7 +50,7 @@ spec:
           restartPolicy: OnFailure
           containers:
             - name: crawler
-              image: "{{ include "helm-law-scraw.image" (dict "registry" $.Values.images.legalSources.registry "repository" $repo "tag" $tag) }}"
+              image: "{{ include "helm-law-scraw.image" (dict "registry" $registry "repository" $repo "tag" $tag) }}"
               imagePullPolicy: {{ $.Values.images.legalSources.pullPolicy }}
               {{- include "helm-law-scraw.legalResources" $.Values.legalSources | nindent 14 }}
               env:

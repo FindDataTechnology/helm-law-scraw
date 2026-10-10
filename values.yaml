@@ -38,9 +38,13 @@ images:
   legalSources:
     # fd-law-data images for the 5 wave-1 crawls, flk-law-backfill, the 5 loads
     # and legal-sources-report. Bump tag per wave (see APPLY-NOTES.md).
+    # sha-7d89e71: incremental identity keys stabilised (rmfyalk case_no,
+    # party canonical URL, gov-rules scheme-normalised URL) — see change
+    # rmfyalk-incremental-identity. Without it every nightly run re-fetches
+    # the whole corpus.
     registry: ccr.ccs.tencentyun.com
     repository: lawcraw-business/fd-law-data
-    tag: sha-3ca3e8b
+    tag: sha-7d89e71
     pullPolicy: IfNotPresent
   flkLawCrawl:
     # IN-SERVICE (suspend=false) daily flk incremental crawl. Converged to the
@@ -179,9 +183,12 @@ legalSources:
         # sha-9eb5c72 carries identity_alias into crawl_runs.startRun (FD_ACCOUNT
         # -> runs traceable to the leased identity). Built via server2 delta
         # (GitHub billing blocks private-repo Actions).
+        # sha-7d89e71: incremental identity keys stabilised (case_no identity) —
+        # without it every run re-fetches the whole corpus (change
+        # rmfyalk-incremental-identity).
         registry: ccr.ccs.tencentyun.com
         repository: lawcraw-business/fd-law-data
-        tag: sha-9eb5c72
+        tag: sha-7d89e71
       command:
         - node
         - bin/rmfyalk-crawl.mjs
