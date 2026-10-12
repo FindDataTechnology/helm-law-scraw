@@ -149,6 +149,29 @@ flkLawCrawl:
 # Crawl/loader/report images come from images.legalSources (ccr + pinned sha).
 # Crons ship suspended; flip suspend per wave (see APPLY-NOTES.md). Credentials
 # stay in Secrets; never commit real values to this chart.
+#
+# 点亮门 (lighting-up gate) — a source may be unsuspended only when ALL hold:
+#   fix merged on main / image pinned to an immutable sha-<short> from the TCR
+#   channel / one manual dry-run passed sampled QA (ccdi: ≥95% capture rate of
+#   source-side entries that have a body page; party: entry count matches the
+#   enumerated category baseline) / no open blocker.
+# Then a 3-day observation window per source: daily freshness stays inside the
+# 48h green line and the daily report shows no stale verdict.
+#
+# Image channel (never Jenkins→Harbor; Harbor retired 2026-10-11):
+#   push → GitHub Actions image.yml → hkccr.ccs.tencentyun.com/lawcraw-business
+#   → cheap-3 tcr-relay (cron */5) → ccr.ccs.tencentyun.com/lawcraw-business
+# Warm with `crictl pull` before rolling — the relay can lag Actions by minutes.
+# If Actions is billing-blocked, delta-build on xinru-server2 (see fd-law-data
+# README).
+#
+# 巡检: legal-sources-report writes laws/legal-sources/report/report-YYYYMMDD.json
+# daily; a gap in that series is the only report-outage signal (no push alert).
+# `stale_sources` = 断流 (no success within 48h) and is the only thing that fails
+# the report job; `incomplete` = coverage gap (latest manifest not complete) and
+# is NOT an outage — zero-new runs never write a new manifest, so an accepted
+# out-of-scope gap can persist there while the source stays fresh. new_today=0
+# is healthy, never stale.
 legalSources:
   secretName: flk-law-crawl-credentials
   lawsBucket: laws
