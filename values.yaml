@@ -42,24 +42,33 @@ images:
     # party canonical URL, gov-rules scheme-normalised URL) — see change
     # rmfyalk-incremental-identity. Without it every nightly run re-fetches
     # the whole corpus.
+    # sha-b63d0d1 (2026-10-12): report job-failure semantics — only 断流
+    # (stale_sources) fails the CronJob; prior tag contains everything above.
+    # 2026-10-14 incident: 11 live objects pinned sha-7d89e71 while the tag had
+    # been evicted from ccr (hkccr still had it; relay's seen-ledger never
+    # re-pushes). Node image-GC then forced re-pulls → mass ImagePullBackOff.
+    # Restoration = manual `tcr-relay-sync.sh lawcraw-business/fd-law-data
+    # sha-7d89e71` + anchors.conf entry. Never pin a tag that is not anchored.
     registry: ccr.ccs.tencentyun.com
     repository: lawcraw-business/fd-law-data
-    tag: sha-7d89e71
+    tag: sha-b63d0d1
     pullPolicy: IfNotPresent
   flkLawCrawl:
-    # IN-SERVICE (suspend=false) daily flk incremental crawl. Converged to the
-    # xinru live image; changing this must match the cluster exactly or the
-    # in-service chain breaks on next apply.
-    registry: 100.64.0.8:30880
-    repository: lawcraw_business/fd-law-data
-    tag: sha-e78d96e
+    # IN-SERVICE (suspend=false) daily flk incremental crawl.
+    # 2026-10-14 incident: this and authBroker were still pinned to the retired
+    # Harbor (100.64.0.8:30880, decommissioned 2026-10-11); they only kept
+    # running on node image cache and died the moment pods were recreated.
+    # Unified onto the legal-line tag (ccr sha-b63d0d1) so the whole line
+    # shares one anchored, pull-able image. No pull secret: nodes hold ccr creds.
+    registry: ccr.ccs.tencentyun.com
+    repository: lawcraw-business/fd-law-data
+    tag: sha-b63d0d1
     pullPolicy: IfNotPresent
-    imagePullSecrets:
-      - harbor-lawcraw-pull
   authBroker:
-    # lease-api Deployment; live runs the Harbor registry mirror image.
-    registry: 100.64.0.8:30880
-    repository: lawcraw_business/legal-auth-broker
+    # lease-api Deployment. 2026-10-14: migrated off retired Harbor to ccr
+    # (identical tag sha-b726e1f existed there all along).
+    registry: ccr.ccs.tencentyun.com
+    repository: lawcraw-business/legal-auth-broker
     tag: sha-b726e1f
     pullPolicy: IfNotPresent
   # --- legacy components, disabled on xinru (nothing live) ---
@@ -209,9 +218,11 @@ legalSources:
         # sha-7d89e71: incremental identity keys stabilised (case_no identity) —
         # without it every run re-fetches the whole corpus (change
         # rmfyalk-incremental-identity).
+        # 2026-10-14: unified onto the line tag sha-b63d0d1 (report semantics
+        # fix; crawl code identical between the two — see 7d89e71..b63d0d1).
         registry: ccr.ccs.tencentyun.com
         repository: lawcraw-business/fd-law-data
-        tag: sha-7d89e71
+        tag: sha-b63d0d1
       command:
         - node
         - bin/rmfyalk-crawl.mjs
@@ -269,7 +280,9 @@ legalSources:
     ccdi-supervisory-regulations:
       name: ccdi-supervisory-crawl
       schedule: "50 3 * * *"
-      suspend: true
+      # == live (lit 2026-10-10 after the 点亮门; reconverged 2026-10-14 —
+      # live had already been unsuspended outside the chart).
+      suspend: false
       concurrencyPolicy: Forbid
       activeDeadlineSeconds: 28800
       sourceLabel: true
@@ -298,7 +311,9 @@ legalSources:
     # name `loader`, OnFailure, Forbid, activeDeadlineSeconds 7200 (default).
     rmfyalk-case-load:
       schedule: "30 5 * * *"
-      suspend: true
+      # == live (reconverged 2026-10-14; live had been unsuspended outside the
+      # chart — the load side only reads the bucket so it is safe lit).
+      suspend: false
       source: rmfyalk-case-library
       command: ["node", "bin/rmfyalk-load.mjs", "--source", "rmfyalk-case-library"]
     mfa-treaty-load:
@@ -318,7 +333,8 @@ legalSources:
       command: ["node", "bin/party-regulation-load.mjs", "--source", "party-regulation-library"]
     ccdi-supervisory-load:
       schedule: "10 5 * * *"
-      suspend: true
+      # == live (reconverged 2026-10-14; lit outside the chart with its crawl).
+      suspend: false
       source: ccdi-supervisory-regulations
       command: ["node", "bin/ccdi-supervisory-load.mjs", "--source", "ccdi-supervisory-regulations"]
   telemetry:

@@ -1,9 +1,9 @@
 {{- /*
 IN-SERVICE CronJob (suspend=false): xinru live truth, zero behavior change.
-Name/labels/image/pullSecrets mirror the live object verbatim; the image is
-the Harbor registry-mirror build (NOT ccr) and keeps its harbor-lawcraw-pull
-pull secret. Do not point this at images.legalSources - the in-service flk
-chain must not move with the legal-sources waves.
+2026-10-14: migrated off the retired Harbor (decommissioned 2026-10-11 — the
+job only survived on node image cache) onto ccr via images.flkLawCrawl, which
+now tracks the same anchored tag as the legal-sources line. No pull secret:
+nodes carry ccr credentials.
 */ -}}
 apiVersion: batch/v1
 kind: CronJob
