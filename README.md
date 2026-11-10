@@ -122,6 +122,54 @@ kubectl -n scraw create job --from=cronjob/law-craw-helm-law-scraw-law-contracts
 | `redis.auth.enabled` | `false` | Disabled by default (chart URL has no password). Enable if you add a password to the URL. |
 | `redis.enabled` / `postgresql.enabled` | `true` | Disable to use external hosts |
 
+## legal-sources-report 的判据口径
+
+`legalSources.sources` / `legalSources.loaders` 建的是 crawl/load 一对 CronJob；
+`legalSources.report` 是那条**日体检**（06:00 Asia/Shanghai）。它跑
+`bin/legal-sources-report.mjs`，然后**把自己也记进 `crawl_runs`** —— 记录器就写在
+`legalSources.report.command` / `.args` 里（`sh -c` + 一段 `node -e`）。
+
+> 为什么要写在 chart 里：这份记录器的真身过去只存在于
+> `fd-law-data/k8s/legal-source-crawl-cronjobs.yaml`（该文件已 SUPERSEDED），
+> chart 里只是裸跑脚本。于是**谁 apply chart 谁就把 crawl_runs 里那一行记录弄丢**，
+> 而且没有任何门会红。2026-11-10 收编进 chart，并加了
+> `make verify-report` 这条断言。
+
+### 两个判据，别混
+
+| 字段 | 含义 | 判据 |
+|---|---|---|
+| `stale_sources` | **断流**：这条源在绿线（`STALE_AFTER_HOURS = 48`）内没有任何成功证据 | `freshness_at = max(最近完整 manifest, state.json, 库里最新一行)` 晚于 48h 前 |
+| `load_stalled_sources` | **装载停滞**：crawl 真有产出、库却不跟着长 | 某次 **`emitted > 0`** 的跑批发生在库中最新一行之后，且间隔 > 48h |
+
+两者都让日报告 `exit 2`（`shouldFail` 认两边的并集）：都是「数据没进库」，
+区别只在断在 crawl 还是断在 load。
+
+### `emitted > 0` 是刻意的锚点
+
+装载停滞**只认有产出的跑批**，不敢用 `state_updated_at` 当锚点：
+
+- 零新增的干净跑批**每天都会推进** `state.json` —— 这正是「零新增不是断流」那条设计；
+- 拿它当锚点，会把所有安静的上游全报成装载停滞。
+
+实测样本（2026-11-10）：`mfa-treaty` 的 crawl/load 每天 `success`、`rows=0`、
+`state` 每天推进，而库里 35 天没有新行 —— 那是**上游确实没有新条约**（条约不是天天签），
+不是故障。安静的上游没有 `emitted > 0` 的跑批，`crawlAt` 为 null，自然不报。
+
+### 向后兼容
+
+镜像尚未更新时报告里没有 `load_stalled_sources`，记录器 `join` 得到空串 ——
+`status` 与 `error_head` 与旧记录器**逐字节一致**。也就是说收编本身不改变任何既有
+观测口径，出片后才开始报装载停滞。回归用例：
+`fd-law-data/test/legal-report-recorder.test.mjs`（新旧记录器同输入逐字段对比）。
+
+### 自检
+
+```bash
+make verify-report     # 断言 report.args 仍是记录器形态且认识 load_stalled_sources
+make lint
+```
+
 ## Notes
 
 - The application images (`scraw-ops-scrapyd`, `scraw-law-contracts`) must be built

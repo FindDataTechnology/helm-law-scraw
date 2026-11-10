@@ -3,7 +3,7 @@ NAMESPACE ?= scraw
 RELEASE ?= law-craw
 REGISTRY ?= docker.io
 
-.PHONY: help lint dep-build install upgrade package
+.PHONY: help lint verify-report dep-build install upgrade package
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | \
@@ -11,6 +11,9 @@ help: ## Show this help
 
 lint: ## Run helm lint
 	helm lint .
+
+verify-report: ## Assert the report CronJob keeps its crawl_runs recorder (incl. load_stalled)
+	./scripts/assert-report-recorder.sh
 
 dep-build: ## Fetch Bitnami subchart dependencies
 	helm dependency build .
