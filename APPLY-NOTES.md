@@ -161,3 +161,18 @@ Chart 变更（`5954a54` + `fdba628`）：
 
 回滚点：`~/law-rollback/20261111-033446/`（6 个 CronJob + auth-broker Deployment）、
 `/tmp/values-before-bump.yaml`；tag 回退到 `sha-b63d0d1` / `sha-b726e1f` 后重新 apply。
+
+### runner_image 已同步（2026-11-11）
+
+`crawl_sources.runner_image` 里 7 个源此前仍钉 `sha-b63d0d1`（dispatcher 触发的
+Job 用登记值、不用 chart 值，所以只改 chart 不够 —— drill 4.2 就栽在这）：
+
+```
+ccdi-supervisory-crawl, flk-law-crawl, gov-rules-crawl, guide-cases-crawl,
+mfa-treaty-crawl, party-regulation-crawl, rmfyalk-case-crawl
+→ ccr.ccs.tencentyun.com/lawcraw-business/fd-law-data:sha-30f5179
+```
+
+回滚点：`~/law-rollback/runner-image-20261111-044356.sql`（逐源还原为 `sha-b63d0d1`）。
+复核：`select source, split_part(runner_image,':',2) from crawl_sources where runner_image is not null;`
+应全部为当前 tag。
