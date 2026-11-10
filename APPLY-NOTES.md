@@ -131,3 +131,33 @@ helm template law-craw . --namespace scraw \
 - 渲染：`helm template law-craw . --namespace scraw -f values-server1.yaml`
 - **runner_image 同步义务**：升级 `images.legalSources.tag` 时必须同步 `crawl_sources.runner_image`（dispatcher 触发的 Job 用登记值，不是 chart 值）——drill 4.2 曾因此跑旧镜像。
 - xinru 侧 13 个挂起 CronJob 为回退，稳定一周后清理。
+
+## 出片记录 2026-11-11：统一到 `sha-30f5179`
+
+出片通道：公开镜像仓 `scs001/fd-law-data`（免费线），run `42885942197` 全绿
+（test 19s / fd-law-data 43s / wenshu 1m23s / auth-broker 1m0s），三镜像各铸
+`sha-30f5179`。真源 `FindDataTechnology/fd-law-data` @ `1ace71a`。
+
+带上产的两笔修复：
+- `lib/legal-sources/report.js` — `load_stalled_sources`（锚点只认 `emitted>0` 的跑批，
+  不用 `state_updated_at`；否则零新增的干净跑批会让安静上游集体误报）
+- `lib/auth-broker/{identity,service}.js` — `cooldown` 有界出口 + `/failure` 默认 `login_required`
+
+**拉取不是即时的**：构建推 hkccr，集群拉 ccr，靠 `tcr-relay` 首见携带。
+首次直接拉 → `ImagePullBackOff / code = NotFound`；等 relay 轮次（≤5min）后两 tag 均
+`phase=Succeeded`。**上产前务必先验可拉**（`kubectl run` 一个短命 pod 即可）。
+
+Chart 变更（`5954a54` + `fdba628`）：
+- `images.legalSources.tag` / `images.authBroker.tag` → `sha-30f5179`（4 处；`lawContracts` 未动）
+- `legal-sources-report`：`backoffLimit: 0` + `restartPolicy: Never`
+  **只改 restartPolicy 不够** —— Job 层仍按默认 `backoffLimit=6` 重试 7 次，
+  实测一个日任务写出 7 条重复失败行。改动后实测：新增恰好 1 行、只有 1 个 pod。
+
+生产验证：
+- `deploy/legal-auth-broker` 滚动成功，`ready=1`
+- 报告 JSON 已含 `last_crawl_at` / `load_stalled` / `load_stalled_sources`；
+  5 源全部 `false`、`load_stalled_sources=[]`（mfa 35d、party 33d 无新行但 crawl 每日
+  `emitted=0`，属安静上游 —— 判据按设计不报，这正是 `emitted>0` 锚点要的行为）
+
+回滚点：`~/law-rollback/20261111-033446/`（6 个 CronJob + auth-broker Deployment）、
+`/tmp/values-before-bump.yaml`；tag 回退到 `sha-b63d0d1` / `sha-b726e1f` 后重新 apply。
