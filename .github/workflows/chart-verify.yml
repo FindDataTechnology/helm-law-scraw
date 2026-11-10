@@ -1,0 +1,60 @@
+# chart 门：断言 legal-sources-report 的记录器仍然完整（含 load_stalled 判据）。
+#
+# 为什么是自建 runner 而不是 ubuntu-latest：
+# 本仓保持 PRIVATE（裁决 2026-11-10），而该组织的 GitHub 托管分钟已耗尽
+# （2006/2000）。托管 runner 上跑 = 门挂在一个不调度的地方，等于没有门。
+# 自建 runner **不消耗托管分钟**，这是「走 GitHub Actions 又不依赖私有仓额度」的
+# 唯一可行解。代价是需要先注册一台（见下）。
+#
+# ⚠ 未注册 runner 之前：本 workflow 会**排队**而不是跑。不要把「排队」当绿灯，
+#   排队期间真正的门是本地 pre-commit（./scripts/install-git-hooks.sh）。
+name: chart-verify
+
+on:
+  pull_request:
+    paths: ["values*.yaml", "templates/**", "scripts/**", "Makefile", ".github/workflows/chart-verify.yml"]
+  push:
+    branches: [main]
+    paths: ["values*.yaml", "templates/**", "scripts/**", "Makefile", ".github/workflows/chart-verify.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: chart-verify-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    # 自建 runner：标签需含 linux。不消耗 GitHub 托管分钟。
+    runs-on: [self-hosted, linux]
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: 前置检查（helm 必须存在，缺了直接红而不是跳过）
+        run: |
+          command -v helm >/dev/null || { echo "::error::runner 上没有 helm"; exit 1; }
+          helm version --short
+
+      # 子依赖是 gitignored 的。二选一，按 runner 实况保留一条：
+      #   (a) runner 能访问 oci://registry-1.docker.io/bitnamicharts → 走 dependency build
+      #   (b) runner 预置 charts/*.tgz（mount 或 seed）→ 跳过本步
+      # 内网实测 (a) 会 i/o timeout，因此这里先看有没有预置，没有再尝试联网。
+      - name: 子依赖
+        run: |
+          if ls charts/*-*.tgz >/dev/null 2>&1; then
+            echo "charts/ 已预置：$(ls charts/*-*.tgz | tr '\n' ' ')"
+          else
+            echo "charts/ 为空，尝试 helm dependency build（需能访问 bitnamicharts）"
+            helm dependency build . || {
+              echo "::error::拉不到 bitnamicharts。请给 runner 预置 charts/*.tgz，或放通 oci://registry-1.docker.io/bitnamicharts"
+              exit 1
+            }
+          fi
+
+      - name: chart 门
+        run: make verify-report

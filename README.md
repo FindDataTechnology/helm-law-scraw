@@ -201,7 +201,7 @@ PATH=$d ./scripts/assert-report-recorder.sh; echo "退出码=$?"
 
 还原后再跑 `make verify-report` 应全绿。
 
-### 这个门跑在哪（为什么没有 workflow）
+### 这个门跑在哪（自建 runner 的 GitHub Actions + 本地 pre-commit）
 
 **本仓保持私有**，而该 org 的私有 CI 额度已耗尽（2006/2000，私有 Actions 不调度）；
 公开仓才免费用 Actions，但本仓内容不适合公开：`values.yaml` / `APPLY-NOTES.md` 里有
@@ -209,7 +209,19 @@ tailnet 内网地址（`100.64.0.5` 的 RustFS/PG、退役前的 `100.64.0.8:308
 法务源清单与身份命名（`acct001`、`rmfyalk` / `wenshu` / `ccdi` / `mfa-treaty` /
 `party-regulation` / `gov-rules`）—— 那是这条产品线的运营地图，不是模板。
 
-所以门放在**本地**，opt-in 安装：
+**结论：门走 GitHub Actions，但只跑自建 runner** —— 自建 runner 不消耗托管分钟，
+不受私有仓额度影响。`.github/workflows/chart-verify.yml` 已就位，
+`runs-on: [self-hosted, linux]`。
+
+⚠ **runner 尚未注册前，该 workflow 会排队而不是跑**。排队期间真正的门是本地
+pre-commit。不要把「一直排队」当成绿灯。
+
+runner 就绪条件：
+1. 注册一台带 `self-hosted,linux` 标签的 runner 并授权本仓；
+2. runner 能拿到子依赖 —— 预置 `charts/*.tgz`，或放通
+   `oci://registry-1.docker.io/bitnamicharts`（内网实测会 i/o timeout，建议预置）。
+
+本地 opt-in 安装（runner 未就绪期间用它兜住）：
 
 ```bash
 ./scripts/install-git-hooks.sh     # 只改本克隆的 core.hooksPath=.githooks
@@ -236,8 +248,8 @@ helm 缺失时**拒绝而不是跳过**（不假绿）。
 - `charts/` and `Chart.lock` are gitignored — run `helm dependency build` after clone.
 ## 解冻后执行清单
 
-> 冻结原因：私有仓是否公开待裁决。冻结期间**不改仓库可见性、不加 workflow**。
-> 下列动作按顺序执行，每步都给了验证与回滚；未裁决前一步都不要跑。
+> 状态：可见性**已裁决为 PRIVATE**（2026-11-10），不再作为可选项。
+> 下列动作按顺序执行，每步都给了验证与回滚。
 
 ### 0. 动手前先备份（`/tmp` 会随重启消失，别依赖旧备份）
 
@@ -257,22 +269,12 @@ echo "备份目录: ~/law-rollback/$D"
 
 验证与回滚：无。
 
-### 2. 裁决 B：改为公开（**顺序不可颠倒**）
+### 2. 仓库可见性：已裁决为 PRIVATE（不再作为可选项）
 
-先清洗、再改可见性、最后接 CI——颠倒就等于先泄露再补救。
-
-1. **清洗**（在本地分支做，先不推）：
-   - `values.yaml` / `values-chengsi.yaml` / `values-server1.yaml`：把 `100.64.0.5`、`100.64.0.8:30880`
-     等内网地址换成 `REPLACE_ME` 占位或外部化到 `values-private.yaml`（该文件写进 `.gitignore`）；
-   - `APPLY-NOTES.md`：法务源清单、`acct001` 等身份命名脱敏；
-   - 复核：`git grep -nIE "100\.64\.|acct[0-9]{3}|lawcraw_business"` 应为 0 命中。
-     **全历史也要扫**（`git log -p` / `gitleaks`），只洗 HEAD 没用。
-2. **改可见性**：`gh repo edit FindDataTechnology/helm-law-scraw --visibility public --accept-visibility-change-consequences`
-3. **接 CI**：新增 `.github/workflows/chart-verify.yml`，只做一件事——`make verify-report`。
-4. 验证：改动一个坏值 PR → CI 红；修好后绿。
-5. **回滚**：`gh repo edit FindDataTechnology/helm-law-scraw --visibility private --accept-visibility-change-consequences`。
-   注意：**公开过的内容视为已泄露**，回滚可见性不能收回（fork/缓存/索引仍可能留存），
-   所以第 1 步必须在第 2 步之前完成。
+2026-11-10 裁决：本仓**保持私有**，理由见上节（内容含 tailnet 内网地址与法务源清单）。
+因此**不存在"公开前必须清零"这条路径**；原先的"公开 + 接 CI"分支已删除。
+卫生债（26 处内网地址/身份命名）按普通技术债排期，见
+`openspec/changes/chart-gate-and-repo-hygiene/tasks.md` 第 1 节。
 
 ### 3. 出片（与裁决无关，两笔代码修复等这步生效）
 
