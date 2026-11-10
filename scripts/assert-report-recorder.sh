@@ -15,6 +15,23 @@ RELEASE="${RELEASE:-law-craw}"
 NAMESPACE="${NAMESPACE:-scraw}"
 NAME="${NAME:-legal-sources-report}"
 
+# 子依赖（charts/）是 gitignored 的，新克隆里必然缺席。
+# 这里**只做前置检查**、不自动补：`helm dependency build` 要从 Docker Hub 拉
+# bitnami 的 OCI chart，内网/离线环境下会卡满超时（实测 60s 后 i/o timeout），
+# 把网络问题混进内容门里最容易被 --no-verify 绕过。缺了就直接说清楚怎么补。
+# 注意形态：依赖是**打包好的 .tgz**（charts/redis-27.0.15.tgz），不是解包目录。
+# 判据按真实文件名匹配，不按我以为的目录名（这条已经栽过一次）。
+have_dep() { ls "$CHART_DIR"/charts/"$1"-*.tgz >/dev/null 2>&1; }
+if ! have_dep redis || ! have_dep postgresql; then
+  cat >&2 <<'EOS'
+✗ 子依赖缺失（charts/ 被 gitignore），无法渲染。
+  先跑一次：helm dependency build .
+  （需要能访问 oci://registry-1.docker.io/bitnamicharts；离线时这一步会超时）
+  这是环境前置，不是 chart 内容问题。
+EOS
+  exit 1
+fi
+
 RENDERED="$(helm template "$RELEASE" "$CHART_DIR" --namespace "$NAMESPACE" 2>&1)" || {
   printf '✗ helm template 失败：\n%s\n' "$RENDERED"; exit 1; }
 

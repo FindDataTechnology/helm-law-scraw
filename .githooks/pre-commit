@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# chart 门（本地版）：暂存区碰到 chart 内容就断言 report 记录器仍然完整。
+#
+# 为什么不挂 GitHub Actions：本仓保持私有，而该 org 的私有 CI 额度已耗尽
+# （2006/2000，Actions 不调度）；公开仓才免费，但公开会暴露内网地址与法务源清单。
+# 所以门放在本地 pre-commit —— 由 scripts/install-git-hooks.sh 显式安装，
+# 不装则完全不干预（别的会话/别的克隆不受影响）。
+set -uo pipefail
+
+# 只有真正动到 chart 的提交才跑：改 README 之外的东西不必付这个代价。
+CHANGED="$(git diff --cached --name-only --diff-filter=ACMR)"
+if ! printf '%s\n' "$CHANGED" | grep -qE '^(values.*\.yaml|templates/|scripts/|Makefile)'; then
+  exit 0
+fi
+
+if ! command -v helm >/dev/null 2>&1; then
+  printf '✗ pre-commit: 找不到 helm，chart 门无法执行（不跳过，避免假绿）\n' >&2
+  exit 1
+fi
+
+printf 'pre-commit: chart 内容有变动，跑 make verify-report …\n'
+if ! make -s verify-report >/tmp/chart-gate.$$ 2>&1; then
+  printf '✗ chart 门未通过：\n' >&2
+  sed 's/^/    /' /tmp/chart-gate.$$ >&2
+  rm -f /tmp/chart-gate.$$
+  printf '\n修好后重新提交；确需绕过用 git commit --no-verify（请说明理由）。\n' >&2
+  exit 1
+fi
+rm -f /tmp/chart-gate.$$
+printf '✓ chart 门通过\n'

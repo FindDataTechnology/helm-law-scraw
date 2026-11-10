@@ -201,6 +201,30 @@ PATH=$d ./scripts/assert-report-recorder.sh; echo "退出码=$?"
 
 还原后再跑 `make verify-report` 应全绿。
 
+### 这个门跑在哪（为什么没有 workflow）
+
+**本仓保持私有**，而该 org 的私有 CI 额度已耗尽（2006/2000，私有 Actions 不调度）；
+公开仓才免费用 Actions，但本仓内容不适合公开：`values.yaml` / `APPLY-NOTES.md` 里有
+tailnet 内网地址（`100.64.0.5` 的 RustFS/PG、退役前的 `100.64.0.8:30880`）、
+法务源清单与身份命名（`acct001`、`rmfyalk` / `wenshu` / `ccdi` / `mfa-treaty` /
+`party-regulation` / `gov-rules`）—— 那是这条产品线的运营地图，不是模板。
+
+所以门放在**本地**，opt-in 安装：
+
+```bash
+./scripts/install-git-hooks.sh     # 只改本克隆的 core.hooksPath=.githooks
+```
+
+装好后：提交时暂存区若含 `values*.yaml` / `templates/` / `scripts/` / `Makefile`，
+自动跑 `make verify-report`，不通过就拒绝提交；只改 README 之类不触发。
+helm 缺失时**拒绝而不是跳过**（不假绿）。
+卸载：`git config --local --unset core.hooksPath`。
+
+**前置**：`charts/` 是 gitignored 的打包依赖（`charts/redis-27.0.15.tgz` 等），
+新克隆要先 `helm dependency build .`（需要能访问
+`oci://registry-1.docker.io/bitnamicharts`）。缺依赖时门会直接点名这件事并退出 1，
+不把网络问题伪装成内容问题。
+
 ## Notes
 
 - The application images (`scraw-ops-scrapyd`, `scraw-law-contracts`) must be built
