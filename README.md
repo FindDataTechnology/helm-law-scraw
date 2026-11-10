@@ -232,10 +232,29 @@ runner 就绪条件：
 helm 缺失时**拒绝而不是跳过**（不假绿）。
 卸载：`git config --local --unset core.hooksPath`。
 
-**前置**：`charts/` 是 gitignored 的打包依赖（`charts/redis-27.0.15.tgz` 等），
-新克隆要先 `helm dependency build .`（需要能访问
-`oci://registry-1.docker.io/bitnamicharts`）。缺依赖时门会直接点名这件事并退出 1，
-不把网络问题伪装成内容问题。
+### 子依赖为什么入库
+
+`charts/redis-27.0.15.tgz`（104K）与 `charts/postgresql-18.8.0.tgz`（92K）**随仓提交**，
+共约 196K。三个理由，缺一条都足以让它入库：
+
+1. 私有仓 Actions 额度耗尽，CI 不能依赖"跑一次 `helm dependency build`"的余量；
+2. 内网拉不到 `oci://registry-1.docker.io/bitnamicharts`（实测 `i/o timeout`）；
+3. 新克隆没有 `charts/` 就渲染不了 chart —— 任何人第一次跑门都撞红，最后都会
+   `--no-verify` 绕过。
+
+**代价**：二进制进 git。`charts/*` 仍然忽略，只反向放行 `*.tgz`（规则顺序在
+`.gitignore` 里写了原因：git 以最后匹配为准）。
+
+**漂移防线**：`helm` 只按**文件名里的版本**加载子依赖，**不会**拿 `Chart.yaml` 的
+`dependencies.version` 做比对 —— 所以 Chart.yaml 升到 28.x 而 charts/ 还是
+27.0.15.tgz 时，`helm template` 照样成功，线上悄悄跑旧依赖。为此加了：
+
+```bash
+make verify-deps     # 逐对校验 charts/<name>-<version>.tgz，并揪出未声明的残留
+```
+
+它被 `make verify-report` 前置调用（`verify-report: verify-deps`），所以 chart 门的
+第一道就是依赖一致性。缺依赖/版本漂移都会点名到具体文件与修法，退出码 1。
 
 ## Notes
 

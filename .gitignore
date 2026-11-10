@@ -1,7 +1,13 @@
 # Packaged chart dependencies (from `helm dependency update`) - users rebuild locally.
 # Chart.lock IS committed to pin exact dependency versions.
-charts/
+# 2026-11-10：子依赖改为**随仓预置**（charts/*.tgz 入库），理由见 README
+# 「子依赖为什么入库」。私有仓 Actions 额度耗尽 + 内网拉不到 bitnamicharts，
+# 不预置的话 CI 与任何新克隆都渲染不了 chart。
+charts/*
 *.tgz
+# 反向放行：chart 子依赖随仓预置（见上方注释）。这条必须在 *.tgz 之后，
+# git 以**最后匹配**的规则为准。
+!charts/*.tgz
 
 # macOS / editor
 .DS_Store
