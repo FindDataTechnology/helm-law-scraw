@@ -216,10 +216,11 @@ tailnet 内网地址（`100.64.0.5` 的 RustFS/PG、退役前的 `100.64.0.8:308
 ⚠ **runner 尚未注册前，该 workflow 会排队而不是跑**。排队期间真正的门是本地
 pre-commit。不要把「一直排队」当成绿灯。
 
-runner 就绪条件：
-1. 注册一台带 `self-hosted,linux` 标签的 runner 并授权本仓；
-2. runner 能拿到子依赖 —— 预置 `charts/*.tgz`，或放通
-   `oci://registry-1.docker.io/bitnamicharts`（内网实测会 i/o timeout，建议预置）。
+runner 就绪条件见 **[`docs/runner-setup.md`](docs/runner-setup.md)**（前置清单、注册命令、
+三条验收、安全边界与回滚点）。要点：
+1. 一台**常驻** Linux 主机，出网 `github.com:443`（runner 主动外连，不需要入站端口）；
+2. 主机上有 `helm` / `git` / `make` / `bash`；标签必须显式给 `self-hosted,linux`；
+3. 子依赖已随仓入库（`charts/*.tgz`），**不再需要** Docker Hub 访问。
 
 本地 opt-in 安装（runner 未就绪期间用它兜住）：
 
