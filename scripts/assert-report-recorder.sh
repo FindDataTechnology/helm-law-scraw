@@ -55,6 +55,9 @@ else
 fi
 require 'stale_sources'                    '记录器读取 stale_sources'
 require 'load_stalled_sources'             '记录器读取 load_stalled_sources'
+# 只「读」不够：有人把 `&& !loadStalled` 从 status 表达式里删掉，字段还在、判据已死。
+require '!loadStalled'                     '装载停滞参与 status 判定'
+require 'load_stalled='                    '装载停滞落进 error_head'
 require 'INSERT INTO crawl_runs'           '记录器把自己写进 crawl_runs'
 require 'FD_CRAWL_DB_URL'                  '记录器有落库连接来源'
 

@@ -166,9 +166,19 @@ kubectl -n scraw create job --from=cronjob/law-craw-helm-law-scraw-law-contracts
 ### 自检
 
 ```bash
-make verify-report     # 断言 report.args 仍是记录器形态且认识 load_stalled_sources
+make verify-report     # helm template 断言（见下）
 make lint
 ```
+
+`make verify-report` 渲染 chart、只取 `legal-sources-report` 那一段，断言：
+
+1. `command` 渲染为块序列 `sh -c`（多行记录器需要）；
+2. args 里读 `stale_sources` 与 `load_stalled_sources`；
+3. **`!loadStalled` 出现在 status 表达式里、`load_stalled=` 出现在 error_head 里**
+   —— 只读字段不够：把 `&& !loadStalled` 删掉，字段还在但判据已死；
+4. args 里确有 `INSERT INTO crawl_runs` 与 `FD_CRAWL_DB_URL`。
+
+helm 缺失时该目标会直接报错退出 1，不会假绿。
 
 ## Notes
 
