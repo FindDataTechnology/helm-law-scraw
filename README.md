@@ -178,7 +178,28 @@ make lint
    —— 只读字段不够：把 `&& !loadStalled` 删掉，字段还在但判据已死；
 4. args 里确有 `INSERT INTO crawl_runs` 与 `FD_CRAWL_DB_URL`。
 
-helm 缺失时该目标会直接报错退出 1，不会假绿。
+### 负例（这个门的"不会假绿"证据）
+
+一个只会变绿的门没有价值。下面两条是**必须变红**的路径，改动这个记录器后请各跑一次：
+
+| 负例 | 怎么造 | 期望 |
+|---|---|---|
+| **helm 缺失** | 见下方一行命令（造一个只含 shell 工具的 PATH） | 输出 `✗ helm template 失败：helm: command not found`，**退出码 1** |
+| **只读字段、不参与判定** | 把 values 里的 `!stale && !loadStalled` 改回 `!stale` | **只红一条**「装载停滞参与 status 判定」，退出码 1（精准指认，不连坐） |
+
+第一条的造法（可照抄）：
+
+```bash
+d=$(mktemp -d)
+for t in bash sh awk grep sed dirname cat printf; do ln -s "$(command -v $t)" "$d/$t"; done
+PATH=$d ./scripts/assert-report-recorder.sh; echo "退出码=$?"
+```
+
+两条都已实测：前者证明 CI runner 没装 helm 时不会因"什么都没渲染"而放行；
+后者证明"字段被读到"和"字段起作用"是两个门，缺一个就会重演 2026-11-10 那次
+「记录器丢了、谁都没红」。
+
+还原后再跑 `make verify-report` 应全绿。
 
 ## Notes
 
