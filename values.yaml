@@ -353,7 +353,51 @@ legalSources:
     suspend: false
     concurrencyPolicy: Forbid
     activeDeadlineSeconds: 1800
-    command: ["node", "bin/legal-sources-report.mjs"]
+    # 收编 2026-11-10：现场跑的一直是那份**已废弃的** k8s/legal-source-crawl-cronjobs.yaml
+    # 里的 sh -c 形态（跑完脚本再把自己记进 crawl_runs），而 chart 里只是裸跑脚本 ——
+    # 于是「chart 是真相」这句话在这一个对象上是假的，谁 apply chart 谁就把
+    # legal-sources-report 的 run 记录弄丢。这里把现场形态搬进 chart，并补上
+    # load_stalled：
+    #   · 旧记录器只把 stale_sources 写进 error_head，装载停滞完全不可见；
+    #   · 新代码（lib/legal-sources/report.js）会给出 load_stalled_sources，
+    #     镜像未更新时该字段缺失，join 出来是空串，记录器行为与旧版完全一致（向后兼容）。
+    command: ["sh", "-c"]
+    args:
+      - |
+        export FD_RUN_STARTED=$(date +%s)
+        node bin/legal-sources-report.mjs > /tmp/report.json 2>/tmp/report.err
+        RC=$?
+        node -e '
+          const fs = require("fs");
+          const { Client } = require("pg");
+          const rc = Number(process.argv[1]);
+          let report = {};
+          try { report = JSON.parse(fs.readFileSync("/tmp/report.json", "utf8")); } catch {}
+          const rows = Object.values(report.sources || {}).reduce(
+            (n, s) => n + (Number(s && s.db && s.db.total_rows) || 0), 0);
+          const stale = (report.stale_sources || []).join(",");
+          const loadStalled = (report.load_stalled_sources || []).join(",");
+          const status = rc === 0 && !stale && !loadStalled ? "success" : "failed";
+          const err = [rc ? "exit=" + rc : "",
+            stale ? "stale=" + stale : "",
+            loadStalled ? "load_stalled=" + loadStalled : "",
+            fs.existsSync("/tmp/report.err") ? fs.readFileSync("/tmp/report.err", "utf8").slice(-200) : ""]
+            .filter(Boolean).join(" | ").slice(0, 500);
+          const url = process.env.FD_CRAWL_DB_URL;
+          const t0 = Number(process.env.FD_RUN_STARTED) || Math.floor(Date.now() / 1000);
+          const t1 = Math.floor(Date.now() / 1000);
+          if (!url) { console.error("report_special_run: no FD_CRAWL_DB_URL; run not recorded"); process.exit(0); }
+          (async () => {
+            const c = new Client({ connectionString: url });
+            await c.connect();
+            await c.query(
+              "INSERT INTO crawl_runs (source, kind, status, started_at, finished_at, rows_written, error_head) VALUES ($1,$2,$3,to_timestamp($4),to_timestamp($5),$6,$7)",
+              ["legal-sources-report", "special-job", status, t0, t1, rows, err || null]);
+            await c.end();
+            console.log("report_special_run: legal-sources-report", status, "rows=" + rows);
+          })().catch(e => { console.error("report_special_run: psql report failed:", e.message); process.exit(0); });
+        ' "$RC" || true
+        exit $RC
 
 # --- legal Auth Broker (login/session lease API) ---
 # Provides the isolated browser login runtime and the crawler-facing lease API.

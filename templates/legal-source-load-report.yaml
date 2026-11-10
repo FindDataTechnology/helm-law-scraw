@@ -80,3 +80,7 @@ spec:
                 {{- include "helm-law-scraw.legalPgEnv" .Values.legalSources | nindent 16 }}
               command:
 {{ toYaml $report.command | indent 16 }}
+              {{- with $report.args }}
+              args:
+{{ toYaml . | indent 16 }}
+              {{- end }}
