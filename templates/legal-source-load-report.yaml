@@ -62,13 +62,23 @@ spec:
   jobTemplate:
     spec:
       activeDeadlineSeconds: {{ $report.activeDeadlineSeconds | default 1800 }}
+      # **backoffLimit: 0 才是真正的不重试**。restartPolicy: Never 只阻止容器内重启，
+      # Job 层仍会按默认 backoffLimit=6 重试 7 次；而记录器每次退出都写一行
+      # crawl_runs（2026-11-11 实测：一个日任务写出 7 条重复失败行，57→64）。
+      # 报告是"体检结论"，失败不该重试。
+      backoffLimit: 0
       template:
         metadata:
           labels:
             app.kubernetes.io/name: {{ $report.name | default "legal-sources-report" }}
         spec:
           {{- include "helm-law-scraw.imagePullSecrets" $ | nindent 10 }}
-          restartPolicy: OnFailure
+          # 报告任务**不重试**：它的 `exit 2` 是结论（发现 stale / load_stalled），
+          # 不是瞬时故障。原来 OnFailure 会让容器连退 3–7 次，而记录器每次退出都
+          # 往 crawl_runs 写一行 —— 一天一个日任务实测写出 3–7 条重复失败行，
+          # 把真实信号稀释掉（2026-11-11 逐条看 started_at 间隔确认：3 条一簇、
+          # 间隔 12–102 秒）。爬虫侧保留 OnFailure（那里重试有意义）。
+          restartPolicy: Never
           containers:
             - name: report
               image: "{{ include "helm-law-scraw.image" (dict "registry" .Values.images.legalSources.registry "repository" .Values.images.legalSources.repository "tag" .Values.images.legalSources.tag) }}"
