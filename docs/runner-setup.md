@@ -1,9 +1,25 @@
-# 自建 runner 接入（也没做，只是前置清单）
+# 自建 runner 接入（前置清单，**尚未注册**）
 
-> 状态：**尚未注册**。`helm-law-scraw` 的 `.github/workflows/chart-verify.yml` 写的是
-> `runs-on: [self-hosted, linux]`，在 runner 注册前它只会**排队**（`status: queued`），
-> 不会失败也不会跑。**排队不是绿灯** —— 这期间真正的门是本地
-> `./scripts/install-git-hooks.sh`（opt-in pre-commit）+ `make verify-report`。
+## 待办：等常驻 Linux 主机
+
+- [ ] **备一台常驻 Linux 主机**（x86_64/arm64，非笔记本、非临时容器）——当前**唯一**阻塞项
+- [ ] 主机出网 `github.com:443`（含 `api.` / `codeload.` / `objects.githubusercontent.` / `ghcr.io`）
+- [ ] 主机装 `git`、`make`、`bash`、`awk`/`sed`、`helm`
+- [ ] 主机器上跑一次连通性实测（本文档那四条 curl 只是本机参考，不能替代）
+- [ ] 注册：按下方「注册步骤」执行，**标签必须显式 `self-hosted,linux`**
+- [ ] 三条验收全过（runner 在线 / dispatch 不是 queued / 改坏记录器必须红）
+
+阻塞期间的事实（写在这里免得被误读成绿灯）：
+
+| 项 | 现状 |
+|---|---|
+| `chart-verify.yml` | 已就位、已注册到 GitHub（`active`），`runs-on: [self-hosted, linux]` |
+| runner 数 | `gh api repos/…/actions/runners --jq .total_count` → **0** |
+| 触发结果 | `status: queued`（**不是失败，也不是通过**） |
+| 真正的门 | 本地 `make verify-report`（+ opt-in `./scripts/install-git-hooks.sh`） |
+
+> **不要**为了让 CI 显示绿而删掉 workflow 或把它改回 `ubuntu-latest` ——
+> 托管分钟已耗尽（2006/2000），那样改等于把门挂在不调度的地方。
 
 ## 为什么不用 `ubuntu-latest`
 
