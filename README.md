@@ -234,3 +234,77 @@ helm 缺失时**拒绝而不是跳过**（不假绿）。
   `output/items.jl`). Postgresql is included as stack infrastructure for
   scrapyd-deployed spiders, not as the law-contracts output sink.
 - `charts/` and `Chart.lock` are gitignored — run `helm dependency build` after clone.
+## 解冻后执行清单
+
+> 冻结原因：私有仓是否公开待裁决。冻结期间**不改仓库可见性、不加 workflow**。
+> 下列动作按顺序执行，每步都给了验证与回滚；未裁决前一步都不要跑。
+
+### 0. 动手前先备份（`/tmp` 会随重启消失，别依赖旧备份）
+
+```bash
+D=$(date +%Y%m%d-%H%M%S)
+mkdir -p ~/law-rollback/$D
+for cj in legal-sources-report ccdi-supervisory-load gov-rules-load mfa-treaty-load party-regulation-load rmfyalk-case-load; do
+  kubectl -n scraw --context xinru get cronjob "$cj" -o yaml > ~/law-rollback/$D/cj-$cj.yaml
+done
+kubectl -n scraw --context xinru get secret legal-identity-rmfyalk-acct001 -o yaml > ~/law-rollback/$D/secret-identity.yaml
+echo "备份目录: ~/law-rollback/$D"
+```
+
+### 1. 裁决 A：保持私有（当前默认）
+
+**不需要任何仓库/流水线动作。** 只做第 3 步（出片），因为两笔代码修复要新镜像才生效。
+
+验证与回滚：无。
+
+### 2. 裁决 B：改为公开（**顺序不可颠倒**）
+
+先清洗、再改可见性、最后接 CI——颠倒就等于先泄露再补救。
+
+1. **清洗**（在本地分支做，先不推）：
+   - `values.yaml` / `values-chengsi.yaml` / `values-server1.yaml`：把 `100.64.0.5`、`100.64.0.8:30880`
+     等内网地址换成 `REPLACE_ME` 占位或外部化到 `values-private.yaml`（该文件写进 `.gitignore`）；
+   - `APPLY-NOTES.md`：法务源清单、`acct001` 等身份命名脱敏；
+   - 复核：`git grep -nIE "100\.64\.|acct[0-9]{3}|lawcraw_business"` 应为 0 命中。
+     **全历史也要扫**（`git log -p` / `gitleaks`），只洗 HEAD 没用。
+2. **改可见性**：`gh repo edit FindDataTechnology/helm-law-scraw --visibility public --accept-visibility-change-consequences`
+3. **接 CI**：新增 `.github/workflows/chart-verify.yml`，只做一件事——`make verify-report`。
+4. 验证：改动一个坏值 PR → CI 红；修好后绿。
+5. **回滚**：`gh repo edit FindDataTechnology/helm-law-scraw --visibility private --accept-visibility-change-consequences`。
+   注意：**公开过的内容视为已泄露**，回滚可见性不能收回（fork/缓存/索引仍可能留存），
+   所以第 1 步必须在第 2 步之前完成。
+
+### 3. 出片（与裁决无关，两笔代码修复等这步生效）
+
+已推送但**尚未进镜像**：`fd-law-data` 的 `213eb3e`（load_stalled 判据）、`c4c670f`（锚点改
+`emitted > 0`）、`38ccd50`（记录器回归）；`fd-law-data` 的 auth-broker 状态机修复（`8c65527`，
+`cooldown` 出口 + `/failure` 默认 `login_required`）。
+
+1. 出片前判路：`fd-build-channel`（**公开仓线首选、免费无限**；私有池 5 个，余额最多
+   `testaction003/build-pool`）。
+2. 出片后按顺序换 tag：先 `legalSources.tag`（报告/爬取/装载同一 tag），再 `authBroker.tag`。
+   当前分别是 `sha-b63d0d1` 与 `sha-b726e1f`。
+3. 应用：`helm template law-craw . --namespace scraw | kubectl apply -n scraw -f -`
+   （只 apply，别删对象；先跑 `make verify-report`）。
+4. 验证：
+   ```bash
+   kubectl -n scraw --context xinru rollout status deploy/legal-auth-broker
+   # 报告里应开始出现 load_stalled 判据（无停滞时该字段为空，行为与旧版一致）
+   DSN=$(kubectl -n scraw --context xinru get secret federation-db -o jsonpath='{.data.url}' | base64 -d)
+   psql "$DSN" -c "select id,status,left(coalesce(error_head,''),80) from crawl_runs where source='legal-sources-report' order by id desc limit 3;"
+   ```
+5. **回滚**：把 `values.yaml` 的两个 tag 改回 `sha-b63d0d1` / `sha-b726e1f`，
+   重新 `helm template … | kubectl apply`，再 `kubectl -n scraw --context xinru rollout undo deploy/legal-auth-broker`。
+   数据侧不回滚（新镜像只会多报，不会改写既有行）。
+
+### 4. 与该裁决无关、但仍挂着的人工项
+
+- **rmfyalk 重登**：会话停在 2026-09-24，入口在面板 `/panel/partials/auth` 那一行的登录操作。
+  重登后按 spec 走探活 + 小批量才会升 `active`；在那之前 `legal-sources-report` 每天 `exit=2`，
+  原因同一个，不必逐天看。
+- 五个 load CronJob 目前已是 `suspend: false`（按 chart 声明归位）。若需回退：
+  ```bash
+  for cj in ccdi-supervisory-load gov-rules-load mfa-treaty-load party-regulation-load rmfyalk-case-load; do
+    kubectl -n scraw --context xinru patch cronjob "$cj" --type merge -p '{"spec":{"suspend":true}}'
+  done
+  ```
