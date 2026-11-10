@@ -176,3 +176,26 @@ mfa-treaty-crawl, party-regulation-crawl, rmfyalk-case-crawl
 回滚点：`~/law-rollback/runner-image-20261111-044356.sql`（逐源还原为 `sha-b63d0d1`）。
 复核：`select source, split_part(runner_image,':',2) from crawl_sources where runner_image is not null;`
 应全部为当前 tag。
+
+### 生产验证：cooldown 出口（2026-11-11 04:48）
+
+这是本轮最需要实证的一条 —— 它曾让 rmfyalk 静默停摆六周。做法是可逆的实机探测：
+
+1. 把身份置为 `cooldown` 且 `updated_at = now()-31min`（模拟冷却已过）；
+2. `POST /lease/acquire` → **HTTP 200，identity.status = active**，并发出 lease；
+3. `POST /lease/release`（`failure:false`）释放；
+4. 复原为 `login_required`（会话其实早已过期，`active` 是探测产物）。
+
+事件表留下完整痕迹：
+```
+04:48:16  identity_updated/ok   cooldown expired after 30m   ← 出口触发
+04:48:16  lease_acquired/ok
+04:48:34  lease_released/probe_ok
+```
+
+**副作用与复原**：第 3 步把 `last_success_at` 改写成了 2026-11-11（`!failure` 分支）。
+已复原为 `2026-09-24 16:35+00`（原始秒不可考，取 `:00`），并在事件表补一条
+`identity_updated` 说明这次 lease 是探测、非真实抓取 —— **不做无痕修改**。
+
+顺带给 rmfyalk 重登留个判据：重登成功后该行应从 `login_required` 变 `active`，
+且 `last_success_at` 前移到当天。
