@@ -205,9 +205,10 @@ PATH=$d ./scripts/assert-report-recorder.sh; echo "退出码=$?"
 
 **本仓保持私有**，而该 org 的私有 CI 额度已耗尽（2006/2000，私有 Actions 不调度）；
 公开仓才免费用 Actions，但本仓内容不适合公开：`values.yaml` / `APPLY-NOTES.md` 里有
-tailnet 内网地址（`100.64.0.5` 的 RustFS/PG、退役前的 `100.64.0.8:30880`）、
-法务源清单与身份命名（`acct001`、`rmfyalk` / `wenshu` / `ccdi` / `mfa-treaty` /
-`party-regulation` / `gov-rules`）—— 那是这条产品线的运营地图，不是模板。
+内网端点（tailnet 内的对象存储与 PG、退役前的 Harbor）、法务源清单与身份命名
+（账号标识、`rmfyalk` / `wenshu` / `ccdi` / `mfa-treaty` /
+`party-regulation` / `gov-rules` 等来源 slug）—— 那是这条产品线的运营地图，不是模板。
+具体地址与标识不写入文档，真源是集群 Secret 与带外的 `values-private.yaml`。
 
 **结论：门走 GitHub Actions，但只跑自建 runner** —— 自建 runner 不消耗托管分钟，
 不受私有仓额度影响。`.github/workflows/chart-verify.yml` 已就位，

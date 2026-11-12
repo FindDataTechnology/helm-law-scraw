@@ -61,10 +61,10 @@ name. `values.yaml nameOverride/fullnameOverride` are irrelevant now.
   5 loads + report). NO imagePullSecrets on these pods (nodes hold ccr creds).
   `rmfyalk-case-crawl` overrides repository/tag to
   `lawcraw-business/legal-auth-broker:sha-4b79ec5` (same registry).
-- `images.flkLawCrawl` — 100.64.0.8:30880/lawcraw_business/fd-law-data:sha-e78d96e
-  (registry mirror, underscore project) + `harbor-lawcraw-pull` pull secret.
+- `images.flkLawCrawl` — 退役前的 Harbor 镜像（`fd-law-data:sha-e78d96e`，仓库址与项目名
+  见 `values-private.yaml` / 集群 Secret，不写进文档）+ `harbor-lawcraw-pull` pull secret。
   IN-SERVICE; converged to live, zero behavior change.
-- `images.authBroker` — 100.64.0.8:30880/lawcraw_business/legal-auth-broker:sha-b726e1f.
+- `images.authBroker` — 同一退役 Harbor 的 `legal-auth-broker:sha-b726e1f`。
   Live Deployment runs exactly this (lease-api container, no pull secrets).
 
 ## Render-vs-live diff (2026-10-06, after convergence)
@@ -79,13 +79,15 @@ API-server-defaulted probe/protocol fields):
   1. image → ccr registry + pinned sha (the declared target state; live still
      runs harbor sha-e78d96e / sha-f9432d2 / sha-4b79ec5),
   2. imagePullSecrets `harbor-lawcraw-pull` dropped (ccr needs none),
-  3. `legal-sources-report` gains PG_* env (PG_HOST 100.64.0.5, PG_PORT 5432,
-     PG_DATABASE law_db, PG_USER/PG_PASSWORD from flk-law-pg-credentials) —
+  3. `legal-sources-report` gains PG_* env (PG_HOST = tailnet 内 PG 主机，**地址见集群
+     Secret** `flk-law-pg-credentials`；PG_PORT 5432, PG_DATABASE law_db,
+     PG_USER/PG_PASSWORD 同源) —
      required by the new report code; live report predates it.
   Nothing else differs: schedules, suspends (all true), deadlines, envs,
   commands, labels match live; mfa/ccdi crawl deadlines were fixed to live
-  (28800); rmfyalk command carries `--account-id acct001 --auth-broker
-  http://legal-auth-broker.scraw` plus its 4 auth envs from Secrets.
+  (28800); rmfyalk command carries `--account-id <账号标识，见 Secret
+  legal-identity-rmfyalk-…> --auth-broker http://legal-auth-broker.scraw`
+  plus its 4 auth envs from Secrets.
 
 ## Wave flip manual (suspend / image rolls)
 
