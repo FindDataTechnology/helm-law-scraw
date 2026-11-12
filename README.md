@@ -87,6 +87,56 @@ helm install law-craw charts/helm-law-scraw/ \
   --set imageCredentials.existingSecret=my-pull-secret
 ```
 
+## 带外私有值（`values-private.yaml`）
+
+内网端点、PG 主机、法务身份标识**不在本仓**。`values.yaml` 里这些位置一律留空，
+真正的值放在带外 `values-private.yaml`（已 gitignore，同族备份名一并挡掉）。
+模板用 `required` 守卫，所以缺了它渲染会**当场报错并点名缺哪个键**：
+
+```
+Error: execution error at (helm-law-scraw/templates/legal-source-load-report.yaml:41:20):
+缺少 legalSources.rustfs.endpoint：内网端点写在带外 values-private.yaml（已 gitignore），或用 --set 提供
+```
+
+这是**故意**的：静默渲染出一个空地址的 Job，比渲染失败更难查——它会在凌晨三点
+以「连不上对象存储」的形态出现，而根因在两小时前的渲染参数里。
+
+标准渲染（两个 `-f` 都要，顺序无关——两者没有重叠键）：
+
+```bash
+helm template law-craw . --namespace scraw -f values-server1.yaml -f values-private.yaml
+# 或
+make render
+```
+
+需要搬进那份文件的键（`values.yaml` 里同名位置是 `""`）：
+
+| 键 | 说明 |
+|---|---|
+| `private.accountId` | 法务身份标识；代入图表内的 `__ACCOUNT_ID__` 令牌 |
+| `flkLawCrawl.rustfs.endpoint` | 对象存储端点 |
+| `legalSources.rustfs.endpoint` / `.postgres.host` | crawler/loader/report 的对象存储与 PG |
+| `authBroker.rustfs.endpoint` / `.postgres.host` | 身份代理同上 |
+| `wenshuCrawl.rustfs.endpoint` | wenshu 线（默认 `enabled: false`，不渲染） |
+| `images.wenshuCrawl.repository` | 内网镜像项目名（含下划线，与 ccr 项目名不同） |
+
+**`__ACCOUNT_ID__` 为什么是个令牌**：账号标识同时出现在三处形态里——pod label 值、
+crawler 的 `--account-id` 参数、身份 Secret 名 `legal-identity-rmfyalk-<id>`。三者必须
+同源，所以由 `_helpers.tpl` 的 `helm-law-scraw.subst` 在**渲染时**代入（先 `toYaml`
+再替换再缩进，因此带私有文件渲染出的结果与写死时逐字一致）。
+
+卫生门（回归防线）：
+
+```bash
+make verify-hygiene     # = scripts/assert-no-internal-endpoints.sh
+```
+
+它按三个特征判：tailnet 网段、法务账号标识、内网镜像项目名（含下划线的那一个）。
+模式串只写在脚本里（一处真源），**不要**在文档里复制——复制过的判据迟早只改一处。
+它已接进 `make verify-report`，也就接进了 pre-commit 门：谁把内网地址写回来，提交即红。
+CI 里没有 `values-private.yaml`，因此 `make verify-report` / `make lint` 用**占位值**渲染
+（门验的是记录器形态，与真实地址无关）——**不是**跳过渲染，跳过就是假绿。
+
 ## Usage
 
 ```bash
@@ -280,9 +330,13 @@ mkdir -p ~/law-rollback/$D
 for cj in legal-sources-report ccdi-supervisory-load gov-rules-load mfa-treaty-load party-regulation-load rmfyalk-case-load; do
   kubectl -n scraw --context xinru get cronjob "$cj" -o yaml > ~/law-rollback/$D/cj-$cj.yaml
 done
-kubectl -n scraw --context xinru get secret legal-identity-rmfyalk-acct001 -o yaml > ~/law-rollback/$D/secret-identity.yaml
+kubectl -n scraw --context xinru get secret legal-identity-rmfyalk-<账号标识> -o yaml > ~/law-rollback/$D/secret-identity.yaml
 echo "备份目录: ~/law-rollback/$D"
 ```
+
+> `<账号标识>` 的真实值不进 git，取自带外 `values-private.yaml` 的
+> `private.accountId`；不知道是哪个时用
+> `kubectl -n scraw --context xinru get secret | grep legal-identity-rmfyalk-` 直接列出来。
 
 ### 1. 裁决 A：保持私有（当前默认）
 

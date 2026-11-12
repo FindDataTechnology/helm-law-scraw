@@ -33,8 +33,8 @@ images:
   # legacy top-level `registry`. The xinru live truth (2026-10-06) is:
   #   - in-change legal-sources objects run images from ccr.ccs.tencentyun.com
   #     (nodes carry ccr credentials; NO imagePullSecrets on these pods)
-  #   - the in-service flk chain keeps its Harbor/registry-mirror images from
-  #     100.64.0.8:30880 (project name with underscore: lawcraw_business)
+  #   - the in-service flk chain keeps its registry-mirror images from the retired
+  #     internal Harbor（地址与项目名见带外 values-private.yaml，不进 git）
   legalSources:
     # fd-law-data images for the 5 wave-1 crawls, flk-law-backfill, the 5 loads
     # and legal-sources-report. Bump tag per wave (see APPLY-NOTES.md).
@@ -56,7 +56,7 @@ images:
   flkLawCrawl:
     # IN-SERVICE (suspend=false) daily flk incremental crawl.
     # 2026-10-14 incident: this and authBroker were still pinned to the retired
-    # Harbor (100.64.0.8:30880, decommissioned 2026-10-11); they only kept
+    # Harbor（内网地址见 values-private.yaml；2026-10-11 退役）; they only kept
     # running on node image cache and died the moment pods were recreated.
     # Unified onto the legal-line tag (ccr sha-b63d0d1) so the whole line
     # shares one anchored, pull-able image. No pull secret: nodes hold ccr creds.
@@ -84,7 +84,10 @@ images:
     pullPolicy: Always
   wenshuCrawl:
     # Playwright image built from fd-law-data/Dockerfile.wenshu (browsers included).
-    repository: lawcraw_business/fd-law-data-wenshu
+    # Empty by default: the internal registry project name lives in the out-of-band
+    # values-private.yaml (见 `images.wenshuCrawl.repository`)。仅在 enabled=true 时才
+    # 渲染，届时缺值会**报错**而不是拼出一个错地址。
+    repository: ""
     tag: v0.1.0
     pullPolicy: IfNotPresent
 
@@ -146,7 +149,9 @@ flkLawCrawl:
   pageSize: 100
   lookbackDays: 7
   rustfs:
-    endpoint: http://100.64.0.5:9000   # tailnet-internal RustFS (chart installs target the tailnet cluster)
+    # 内网端点不进 git：真源是带外 values-private.yaml（模板里 required 守卫，
+    # 缺值时渲染即报错，不会静默连到空地址）。
+    endpoint: ""
     region: us-east-1
 
 # --- wave-1 authoritative legal sources (fd-law-data) ---
@@ -185,12 +190,12 @@ legalSources:
   secretName: flk-law-crawl-credentials
   lawsBucket: laws
   rustfs:
-    endpoint: http://100.64.0.5:9000
+    endpoint: ""        # 内网端点 → values-private.yaml（required 守卫）
     region: us-east-1
   postgres:
     # PG env for loaders + report (report gains PG in this change: the new
     # report code reads law_db; live report has no PG env yet - accepted diff).
-    host: 100.64.0.5
+    host: ""            # 内网主机 → values-private.yaml（required 守卫）
     port: "5432"
     database: law_db
     secretName: flk-law-pg-credentials
@@ -207,7 +212,9 @@ legalSources:
       # the account identity; auth envs come from Secrets.
       sourceLabel: true
       podLabels:
-        legal.finddata.io/account: acct001
+        # `__ACCOUNT_ID__` 是图表内的替换令牌，由 private.accountId 代入
+        # （见 _helpers.tpl `helm-law-scraw.subst`）。真实账号标识不进 git。
+        legal.finddata.io/account: __ACCOUNT_ID__
       image:
         # rmfyalk crawl needs only bin/lib (main image); dual-mode platform session since sha-c14bb59.
         # sha-9fdb6b1 adds curl (proxy-fetch shells out; missing curl made every
@@ -227,7 +234,7 @@ legalSources:
         - node
         - bin/rmfyalk-crawl.mjs
         - --account-id
-        - acct001
+        - __ACCOUNT_ID__
         - --auth-broker
         - http://legal-auth-broker.scraw
         - --rate-ms
@@ -246,12 +253,12 @@ legalSources:
         - name: LEGAL_AUTH_CRAWL_PROXY_URL
           valueFrom:
             secretKeyRef:
-              name: legal-identity-rmfyalk-acct001
+              name: legal-identity-rmfyalk-__ACCOUNT_ID__
               key: crawl_proxy_url
         - name: LEGAL_AUTH_LOGIN_PROXY_URL
           valueFrom:
             secretKeyRef:
-              name: legal-identity-rmfyalk-acct001
+              name: legal-identity-rmfyalk-__ACCOUNT_ID__
               key: login_proxy_url
     mfa-treaty-library:
       name: mfa-treaty-crawl
@@ -410,13 +417,13 @@ authBroker:
   name: legal-auth-broker
   replicas: 1
   secretName: legal-auth-broker
-  identitySecretName: legal-identity-rmfyalk-acct001
+  identitySecretName: legal-identity-rmfyalk-__ACCOUNT_ID__
   rustfs:
-    endpoint: http://100.64.0.5:9000
+    endpoint: ""        # 内网端点 → values-private.yaml（required 守卫）
     region: us-east-1
   lawsBucket: laws
   postgres:
-    host: 100.64.0.5
+    host: ""            # 内网主机 → values-private.yaml（required 守卫）
     port: 5432
     database: law_db
     secretName: flk-law-pg-credentials
@@ -462,8 +469,18 @@ wenshuCrawl:
   budgetMs: "68400000"          # 19 h internal budget (string to avoid float rendering)
   proxyUrl: ""                  # sticky exit IP via fd-proxy-service (design.md D6); "" = direct
   rustfs:
-    endpoint: http://100.64.0.5:9000
+    endpoint: ""        # 内网端点 → values-private.yaml（required 守卫）
     region: us-east-1
+
+# --- 带外私有值（真源 values-private.yaml，已 gitignore）------------------------
+# 内网端点、PG 主机、法务身份标识都不进 git。缺值时图表**渲染即报错**（模板里的
+# required 守卫），不会静默连到一个空地址。
+#
+# `__ACCOUNT_ID__` 是图表内的替换令牌：账号标识同时出现在 pod label 值、crawler
+# 命令行参数和身份 Secret 名里，三者必须同源，所以统一由 private.accountId 代入
+# （见 _helpers.tpl `helm-law-scraw.subst`）。
+private:
+  accountId: ""
 
 # Bitnami subcharts
 redis:
@@ -476,8 +493,8 @@ redis:
     enabled: false
 
 postgresql:
-  # Disabled on xinru: PG lives off-cluster (100.64.0.5, credentials in
-  # flk-law-pg-credentials); no in-chart postgresql exists in the live cluster.
+  # Disabled on xinru: PG lives off-cluster（主机见 values-private.yaml，凭据在
+  # flk-law-pg-credentials）; no in-chart postgresql exists in the live cluster.
   enabled: false
   auth:
     # Set a password or leave empty; Bitnami generates one if empty.

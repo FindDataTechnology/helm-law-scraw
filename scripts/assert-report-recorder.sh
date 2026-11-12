@@ -25,7 +25,22 @@ if ! "$CHART_DIR/scripts/verify-chart-deps.sh" >/tmp/depcheck.$$ 2>&1; then
 fi
 rm -f /tmp/depcheck.$$
 
-RENDERED="$(helm template "$RELEASE" "$CHART_DIR" --namespace "$NAMESPACE" 2>&1)" || {
+# 2026-11-12：内网端点 / PG 主机 / 法务身份标识已移入带外 values-private.yaml，
+# values.yaml 里留空 + 模板 required 守卫。门在 CI 里没有那份文件，所以用**占位值**
+# 渲染：门验的是记录器代码形态，与真实地址无关，因此不能因此变红，也不能靠
+# 「跳过渲染」放行（那会让门假绿）。
+PRIVATE_ARGS=(
+  --set flkLawCrawl.rustfs.endpoint=http://rustfs.invalid:9000
+  --set legalSources.rustfs.endpoint=http://rustfs.invalid:9000
+  --set legalSources.postgres.host=pg.invalid
+  --set authBroker.rustfs.endpoint=http://rustfs.invalid:9000
+  --set authBroker.postgres.host=pg.invalid
+  --set wenshuCrawl.rustfs.endpoint=http://rustfs.invalid:9000
+  --set images.wenshuCrawl.repository=ci/wenshu
+  --set private.accountId=ci
+)
+
+RENDERED="$(helm template "$RELEASE" "$CHART_DIR" --namespace "$NAMESPACE" "${PRIVATE_ARGS[@]}" 2>&1)" || {
   printf '✗ helm template 失败：\n%s\n' "$RENDERED"; exit 1; }
 
 # 只取目标 CronJob 那一段，避免别的文档里恰好出现同名字符串导致假通过。

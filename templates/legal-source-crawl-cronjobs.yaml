@@ -43,7 +43,7 @@ spec:
             legal.finddata.io/source: {{ $sourceId }}
             {{- end }}
             {{- with $source.podLabels }}
-            {{- toYaml . | nindent 12 }}
+            {{- include "helm-law-scraw.subst" (dict "Values" $.Values "text" (toYaml .)) | nindent 12 }}
             {{- end }}
         spec:
           {{- include "helm-law-scraw.imagePullSecrets" $ | nindent 10 }}
@@ -57,8 +57,8 @@ spec:
                 {{- include "helm-law-scraw.legalRustfsEnv" $.Values.legalSources | nindent 16 }}
                 {{- include "helm-law-scraw.legalTelemetryEnv" (dict "telemetry" $.Values.legalSources.telemetry "imageTag" $.Values.images.legalSources.tag) | nindent 16 }}
                 {{- with $source.extraEnv }}
-                {{- toYaml . | nindent 16 }}
+                {{- include "helm-law-scraw.subst" (dict "Values" $.Values "text" (toYaml .)) | nindent 16 }}
                 {{- end }}
               command:
-{{ toYaml $source.command | indent 16 }}
+{{ include "helm-law-scraw.subst" (dict "Values" $.Values "text" (toYaml $source.command)) | indent 16 }}
 {{- end }}

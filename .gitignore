@@ -20,6 +20,9 @@ charts/*
 !.env.example
 secrets*.yaml
 values-secret*.yaml
+# 2026-11-12：内网端点 / PG 主机 / 法务身份标识的真源。values.yaml 里这些位置留空，
+# 模板用 required 守卫。备份名同族一并挡掉，免得换个名字又进 git。
+values-private*.yaml
 kubeconfig*
 *.pem
 *.key

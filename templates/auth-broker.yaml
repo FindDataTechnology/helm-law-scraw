@@ -48,7 +48,7 @@ spec:
                   name: {{ .Values.authBroker.secretName }}
                   key: vnc-password
             - name: RUSTFS_ENDPOINT
-              value: {{ .Values.authBroker.rustfs.endpoint | quote }}
+              value: {{ required "缺少 authBroker.rustfs.endpoint：内网端点写在带外 values-private.yaml（已 gitignore）" .Values.authBroker.rustfs.endpoint | quote }}
             - name: RUSTFS_ACCESS_KEY
               valueFrom:
                 secretKeyRef:
@@ -64,7 +64,7 @@ spec:
             - name: LAWS_BUCKET
               value: {{ .Values.authBroker.lawsBucket | quote }}
             - name: PG_HOST
-              value: {{ .Values.authBroker.postgres.host | quote }}
+              value: {{ required "缺少 authBroker.postgres.host：内网主机写在带外 values-private.yaml（已 gitignore）" .Values.authBroker.postgres.host | quote }}
             - name: PG_PORT
               value: {{ .Values.authBroker.postgres.port | quote }}
             - name: PG_DATABASE
@@ -82,12 +82,12 @@ spec:
             - name: LEGAL_AUTH_CRAWL_PROXY_URL
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.authBroker.identitySecretName }}
+                  name: {{ include "helm-law-scraw.subst" (dict "Values" $.Values "text" .Values.authBroker.identitySecretName) }}
                   key: crawl_proxy_url
             - name: LEGAL_AUTH_LOGIN_PROXY_URL
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.authBroker.identitySecretName }}
+                  name: {{ include "helm-law-scraw.subst" (dict "Values" $.Values "text" .Values.authBroker.identitySecretName) }}
                   key: login_proxy_url
           args: ["node", "bin/legal-auth-broker.mjs", "serve", "--host", "0.0.0.0", "--port", {{ .Values.authBroker.service.targetPort | quote }}]
           readinessProbe:

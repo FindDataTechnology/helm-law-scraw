@@ -39,7 +39,8 @@ Rendered object set (15 objects) == chart-owned live inventory:
 
 **Not charted on purpose** (live, external, must never be touched by an apply):
 `flk-law-load`, `flk-law-embed`, `federation-observer`, `guide-cases-crawl`,
-`gost-egress`, `proxy-control`, `legal-auth-rmfyalk-acct001-profile` (PVC).
+`gost-egress`, `proxy-control`, and the rmfyalk identity-profile PVC
+(`legal-auth-rmfyalk-<账号标识>-profile`；账号标识见带外 `values-private.yaml`).
 The chart renders no object with any of these names — verified.
 
 **Disabled by default** (nothing live on xinru, verified cluster-wide

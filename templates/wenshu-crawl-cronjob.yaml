@@ -26,11 +26,11 @@ spec:
           restartPolicy: OnFailure
           containers:
             - name: crawler
-              image: "{{ include "helm-law-scraw.image" (dict "repository" .Values.images.wenshuCrawl.repository "tag" .Values.images.wenshuCrawl.tag "registry" $.Values.registry) }}"
+              image: "{{ include "helm-law-scraw.image" (dict "repository" (required "缺少 images.wenshuCrawl.repository：内网项目名写在带外 values-private.yaml（已 gitignore）" .Values.images.wenshuCrawl.repository) "tag" .Values.images.wenshuCrawl.tag "registry" $.Values.registry) }}"
               imagePullPolicy: {{ .Values.images.wenshuCrawl.pullPolicy }}
               env:
                 - name: RUSTFS_ENDPOINT
-                  value: {{ .Values.wenshuCrawl.rustfs.endpoint | quote }}
+                  value: {{ required "缺少 wenshuCrawl.rustfs.endpoint：内网端点写在带外 values-private.yaml（已 gitignore）" .Values.wenshuCrawl.rustfs.endpoint | quote }}
                 - name: RUSTFS_ACCESS_KEY
                   valueFrom:
                     secretKeyRef:

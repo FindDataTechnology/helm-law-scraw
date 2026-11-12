@@ -41,7 +41,7 @@ spec:
               imagePullPolicy: {{ .Values.images.flkLawCrawl.pullPolicy }}
               env:
                 - name: RUSTFS_ENDPOINT
-                  value: {{ .Values.flkLawCrawl.rustfs.endpoint | quote }}
+                  value: {{ required "缺少 flkLawCrawl.rustfs.endpoint：内网端点写在带外 values-private.yaml（已 gitignore）" .Values.flkLawCrawl.rustfs.endpoint | quote }}
                 - name: RUSTFS_ACCESS_KEY
                   valueFrom:
                     secretKeyRef:

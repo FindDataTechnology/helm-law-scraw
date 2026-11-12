@@ -116,7 +116,7 @@ Context: .Values.legalSources
 */}}
 {{- define "helm-law-scraw.legalRustfsEnv" -}}
 - name: RUSTFS_ENDPOINT
-  value: {{ .rustfs.endpoint | quote }}
+  value: {{ required "缺少 legalSources.rustfs.endpoint：内网端点写在带外 values-private.yaml（已 gitignore），或用 --set 提供" .rustfs.endpoint | quote }}
 - name: RUSTFS_ACCESS_KEY
   valueFrom:
     secretKeyRef:
@@ -139,7 +139,7 @@ Context: .Values.legalSources
 */}}
 {{- define "helm-law-scraw.legalPgEnv" -}}
 - name: PG_HOST
-  value: {{ .postgres.host | quote }}
+  value: {{ required "缺少 legalSources.postgres.host：内网主机写在带外 values-private.yaml（已 gitignore），或用 --set 提供" .postgres.host | quote }}
 - name: PG_PORT
   value: {{ .postgres.port | quote }}
 - name: PG_DATABASE
@@ -190,4 +190,18 @@ resources:
   limits:
     cpu: {{ .resources.limits.cpu }}
     memory: {{ .resources.limits.memory }}
+{{- end -}}
+
+{{/*
+私有令牌替换：把图表内写死的 `__ACCOUNT_ID__` 换成 .Values.private.accountId。
+
+为什么要有：法务身份标识同时出现在三处形态里——pod label 值、crawler 命令行参数、
+身份 Secret 名。三者必须同源，但真实值不进 git。做法是**先在文本层替换再缩进**，
+结构不变，因此带 values-private.yaml 渲染的结果与写死时逐字一致。
+
+Context: dict "Values" $ "text" <toYaml 后的文本>
+*/}}
+{{- define "helm-law-scraw.subst" -}}
+{{- $acct := required "缺少 private.accountId：法务身份标识写在带外 values-private.yaml（已 gitignore），或用 --set private.accountId=… 提供" .Values.private.accountId -}}
+{{- .text | replace "__ACCOUNT_ID__" $acct -}}
 {{- end -}}
