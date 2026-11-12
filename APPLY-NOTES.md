@@ -7,10 +7,13 @@ approved):**
 ```bash
 # render exactly what the cluster should look like (object names are
 # release-name independent — safe with any release name)
-helm template law-craw /Users/chengsishi/finddata/helm-law-scraw --namespace scraw
+# ⚠ 2026-11-12 起必须带 -f values-private.yaml：内网端点 / PG 主机 / 账号标识都在
+# 那份带外文件里（已 gitignore）。缺它 → 渲染当场报错并点名缺哪个键，这是**故意**的。
+helm template law-craw /Users/chengsishi/finddata/helm-law-scraw --namespace scraw \
+  -f /Users/chengsishi/finddata/helm-law-scraw/values-private.yaml
 
 # lint
-helm lint /Users/chengsishi/finddata/helm-law-scraw
+cd /Users/chengsishi/finddata/helm-law-scraw && make lint   # 自动带上私有值（缺失时用占位）
 ```
 
 ## ⚠️ Namespace rule (2026-10-06 wave-0 lesson)
@@ -23,6 +26,7 @@ ALWAYS apply with an explicit namespace:
 
 ```bash
 helm template law-craw /Users/chengsishi/finddata/helm-law-scraw --namespace scraw \
+  -f /Users/chengsishi/finddata/helm-law-scraw/values-private.yaml \
   | sudo k3s kubectl apply -n scraw -f -       # --dry-run=server first on any new shape
 ```
 
@@ -112,7 +116,7 @@ Per-source keys: `rmfyalk-case-library`, `mfa-treaty-library`,
 Example — wave-2 pins a new crawler sha and enables gov-rules:
 
 ```bash
-helm template law-craw . --namespace scraw \
+helm template law-craw . --namespace scraw -f values-private.yaml \
   --set-string images.legalSources.tag=sha-<new> \
   --set legalSources.sources.gov-rules-library.suspend=false
 ```
@@ -131,7 +135,8 @@ helm template law-craw . --namespace scraw \
 ## 法律线宿主：xinru-server1（2026-10-07 迁移后）
 
 法律线全家驻 xinru-server1 scraw ns（独立 k3s、节点级 ccr 认证、docker.io 轩辕加速已配）。
-- 渲染：`helm template law-craw . --namespace scraw -f values-server1.yaml`
+- 渲染：`helm template law-craw . --namespace scraw -f values-server1.yaml -f values-private.yaml`
+  （或 `make render`；**两个 -f 都要** —— 内网端点与账号标识在带外那份里）
 - **runner_image 同步义务**：升级 `images.legalSources.tag` 时必须同步 `crawl_sources.runner_image`（dispatcher 触发的 Job 用登记值，不是 chart 值）——drill 4.2 曾因此跑旧镜像。
 - xinru 侧 13 个挂起 CronJob 为回退，稳定一周后清理。
 

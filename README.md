@@ -20,8 +20,11 @@ crawler, from `fd-law-data`), and `redis` + `postgresql` (Bitnami subcharts).
 helm dependency build charts/helm-law-scraw/
 
 # 2. Install (defaults to Docker Hub; override registry for your own)
+#    ⚠ 2026-11-12：还要加 -f values-private.yaml —— 内网端点/PG 主机/账号标识
+#    在带外那份里，缺它渲染即报错（见「带外私有值」一节）。
 helm install law-craw charts/helm-law-scraw/ \
   --namespace scraw --create-namespace \
+  -f values-private.yaml \
   --set registry=docker.io \
   --set images.scrapyd.repository=scraw-ops-scrapyd \
   --set images.lawContracts.repository=scraw-law-contracts
@@ -74,6 +77,7 @@ Create an imagePullSecret and pass it to the chart:
 ```bash
 # Option A: let the chart create the secret
 helm install law-craw charts/helm-law-scraw/ \
+  -f values-private.yaml \
   --set imageCredentials.host=myregistry.example.com \
   --set imageCredentials.username=myuser \
   --set imageCredentials.password=mypassword
@@ -84,6 +88,7 @@ kubectl -n scraw create secret docker-registry my-pull-secret \
   --docker-username=myuser \
   --docker-password=mypassword
 helm install law-craw charts/helm-law-scraw/ \
+  -f values-private.yaml \
   --set imageCredentials.existingSecret=my-pull-secret
 ```
 
@@ -361,8 +366,9 @@ echo "备份目录: ~/law-rollback/$D"
    `testaction003/build-pool`）。
 2. 出片后按顺序换 tag：先 `legalSources.tag`（报告/爬取/装载同一 tag），再 `authBroker.tag`。
    当前分别是 `sha-b63d0d1` 与 `sha-b726e1f`。
-3. 应用：`helm template law-craw . --namespace scraw | kubectl apply -n scraw -f -`
-   （只 apply，别删对象；先跑 `make verify-report`）。
+3. 应用：`helm template law-craw . --namespace scraw -f values-server1.yaml -f values-private.yaml | kubectl apply -n scraw -f -`
+   （只 apply，别删对象；先跑 `make verify-report`。漏掉 `-f values-private.yaml` 会渲染报错，
+   不会静默应用空端点 —— 见「带外私有值」一节）。
 4. 验证：
    ```bash
    kubectl -n scraw --context xinru rollout status deploy/legal-auth-broker
