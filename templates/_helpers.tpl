@@ -205,3 +205,28 @@ Context: dict "Values" $ "text" <toYaml 后的文本>
 {{- $acct := required "缺少 private.accountId：法务身份标识写在带外 values-private.yaml（已 gitignore），或用 --set private.accountId=… 提供" .Values.private.accountId -}}
 {{- .text | replace "__ACCOUNT_ID__" $acct -}}
 {{- end -}}
+{{/*
+未点亮（suspend: true）的源清单，供 legal-sources-report 的 LEGAL_PAUSED_SOURCES 使用。
+
+为什么要有：报告侧「无成功证据 → stale → 任务 exit 2」这条口径，遇到「按点亮门
+合法停着」的源会永远为真（挂起的 CronJob 从不运行，永远没有证据）。把 suspend
+这个部署事实渲染进去，报告才有办法把 negotiated 的暂停与真断流分开。
+
+同一个值同时出现在 sources 与 loaders 两侧：crawl 停了但 load 停，同样不该判断流。
+两边都以 `source` 归属为源名，去重后逗号分隔。
+*/}}
+{{- define "helm-law-scraw.legalPausedSources" -}}
+{{- $paused := list -}}
+{{- range $key, $src := (.sources | default dict) -}}
+{{- /* 只认真正对应一个源的五条（sourceLabel: true）。flk-law-backfill 也挂在
+       sources 下，但它是回填作业、没有源标签，名字也不在报告的适配器表里
+       （源名 = rmfyalk-case-library / mfa-treaty-library / gov-rules-library /
+       party-regulation-library / ccdi-supervisory-regulations）——把它写进暂停
+       清单只会让报告打一行「未知源名」，徒增噪声。 */ -}}
+{{- if and $src.suspend $src.sourceLabel -}}{{- $paused = append $paused $key -}}{{- end -}}
+{{- end -}}
+{{- range $key, $ld := (.loaders | default dict) -}}
+{{- if $ld.suspend -}}{{- $paused = append $paused $ld.source -}}{{- end -}}
+{{- end -}}
+{{- $paused | uniq | join "," -}}
+{{- end -}}

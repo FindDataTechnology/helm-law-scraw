@@ -88,6 +88,11 @@ spec:
                 {{- include "helm-law-scraw.legalRustfsEnv" .Values.legalSources | nindent 16 }}
                 {{- include "helm-law-scraw.legalTelemetryEnv" (dict "telemetry" .Values.legalSources.telemetry "imageTag" .Values.images.legalSources.tag) | nindent 16 }}
                 {{- include "helm-law-scraw.legalPgEnv" .Values.legalSources | nindent 16 }}
+                # 未点亮的源（本清单里 suspend: true 的那些）：报告据此把「按点亮门
+                # 合法停着」与「真断流」分开，不再让暂停源每天把日报告判红。
+                # 源名由 values 渲染，报告不内省集群。
+                - name: LEGAL_PAUSED_SOURCES
+                  value: {{ include "helm-law-scraw.legalPausedSources" .Values.legalSources | quote }}
               command:
 {{ toYaml $report.command | indent 16 }}
               {{- with $report.args }}
