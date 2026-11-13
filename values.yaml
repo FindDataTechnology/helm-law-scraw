@@ -69,7 +69,7 @@ images:
     # (identical tag sha-b726e1f existed there all along).
     registry: ccr.ccs.tencentyun.com
     repository: lawcraw-business/legal-auth-broker
-    tag: sha-30f5179
+    tag: sha-e584fc5
     pullPolicy: IfNotPresent
   # --- legacy components, disabled on xinru (nothing live) ---
   scrapyd:
