@@ -59,6 +59,27 @@ bare names (`rmfyalk-case-crawl`, `legal-auth-broker`, ...) instead of
 `<fullname>-...`; `helm template` output is byte-identical for any release
 name. `values.yaml nameOverride/fullnameOverride` are irrelevant now.
 
+## 站点互斥（apply 前必跑 `make verify-sites`，`make lint` 已依赖它）
+
+同一个 CronJob 不许在两个站点同时点亮。这条闸是 2026-11-14 用数据换来的：
+`values-server1.yaml` 曾把四个爬虫 + 五个 loader + report + flkLawCrawl 写成
+`suspend: false`，而 `values.yaml`（xinru-master，活宿主）上同样这几条**正在跑**。
+两侧同时在跑的证据不在清单里，在 `crawl_runs`：2026-11-13 那一轮
+mfa-treaty / gov-rules / party-regulation / ccdi 各写了两行、`image_tag` 不同
+（master 自报 `sha-e584fc5`，server1 的 CronJob 跑 `sha-b63d0d1`）。
+那种重复只在**两侧 pod 都真起来**时才留痕——11-12 之前 server1 侧一直
+`Failed 0/1`（pod 没起来、不写行），所以这件事长期看不见。
+
+两个必须记住的点：
+
+1. **overlay 不写 = 继承 base 的 `suspend`**。「切换前全部 suspend」这句话如果
+   只写在注释里，渲染产物上是假的：`flk-law-load` / `flk-law-embed` 在 base 里是
+   `false`，两份 overlay 都没写它 ⇒ 它们其实一直是亮的。现在两份 overlay 都显式关掉了。
+2. **切换宿主 = 同一次改动里两边一起翻**（新站点 `false` + 旧站点 `true`）。
+   闸不猜哪边该活（那是人的裁决），只拒绝「两边都活」。
+
+现状（2026-11-14）：**master 是活宿主，server1 / chengsi 全灭**。
+
 ## Images
 
 - `images.legalSources` — ccr.ccs.tencentyun.com/lawcraw-business/fd-law-data,

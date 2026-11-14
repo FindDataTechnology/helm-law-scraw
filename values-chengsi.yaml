@@ -27,5 +27,11 @@ legalSources:
       suspend: true
     ccdi-supervisory-load:
       suspend: true
+    # base(values.yaml) 里 flk-law-load 是 false；不写这一行 = 继承 false，
+    # 「全部 suspend」在渲染产物上就不成立（2026-11-14 互斥闸抓到）。
+    flk-law-load:
+      suspend: true
   report:
     suspend: true
+flkLawEmbed:
+  suspend: true

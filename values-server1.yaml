@@ -1,6 +1,21 @@
 # xinru-server1 安装 overlay — 法律线宿主（change legal-line-federation，用户裁定五机分布）
 # server1 节点已有 ccr 认证（registries.yaml）→ 无需 imageCredentials
-# 切换前全部 suspend；auth-broker 随线部署
+#
+# ⚠ 2026-11-14：这份 overlay 一度把四个爬虫 + 五个 loader + report + flkLawCrawl
+# 都写成 suspend: false，而 xinru-master（values.yaml）上同样这几条**正在跑**。
+# 两侧同时在跑的证据不是清单而是数据：2026-11-13 那一轮 crawl_runs 里
+# mfa-treaty / gov-rules / party-regulation / ccdi 各写了两行、image_tag 不同
+# （master 自报 sha-e584fc5，server1 的 CronJob 跑 sha-b63d0d1）。
+#
+# 那条重复只在两侧 pod **都真起来**时才留痕：11-12 之前 server1 侧一直
+# Failed 0/1（pod 没起来、不写行），所以这件事长期看不见。
+#
+# 纪律：切换宿主 = **同一次改动里两边一起翻**（这里 true + values.yaml 对应项 false），
+# 或反之。只翻一侧就是两个执行者写同一张 crawl_runs、同一批 laws 行。
+# `scripts/verify-site-exclusivity.py`（make verify-sites）拒绝「两边都活」。
+#
+# 现状（2026-11-14）：master 是活宿主，server1 全灭；切换点未到。
+# auth-broker 随线部署（Deployment，不是 cron，故不在这里声明）。
 legalSources:
   sources:
     rmfyalk-case-library:
@@ -9,25 +24,33 @@ legalSources:
       # CronJob stays only as a manual fallback.
       suspend: true
     mfa-treaty-library:
-      suspend: false
+      suspend: true
     gov-rules-library:
-      suspend: false
+      suspend: true
     party-regulation-library:
-      suspend: false
+      suspend: true
     ccdi-supervisory-regulations:
-      suspend: false
+      suspend: true
   loaders:
     rmfyalk-case-load:
-      suspend: false
+      suspend: true
     mfa-treaty-load:
-      suspend: false
+      suspend: true
     gov-rules-load:
-      suspend: false
+      suspend: true
     party-regulation-load:
-      suspend: false
+      suspend: true
     ccdi-supervisory-load:
-      suspend: false
+      suspend: true
+    # base(values.yaml) 里 flk-law-load 是 false；overlay 不写 = 继承 false，
+    # 于是「全部 suspend」这句话在渲染产物上从来不成立（2026-11-14 闸抓到的那条）。
+    flk-law-load:
+      suspend: true
   report:
-    suspend: false
+    suspend: true
 flkLawCrawl:
-  suspend: false
+  suspend: true
+flkLawEmbed:
+    # base(values.yaml) 里 flk-law-embed 是 false；不写 = 继承 false，
+    # 于是「全部 suspend」在渲染产物上不成立（2026-11-14 互斥闸）。
+  suspend: true

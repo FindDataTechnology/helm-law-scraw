@@ -21,14 +21,17 @@ else
 PRIVATE_ARGS := -f $(PRIVATE_VALUES)
 endif
 
-.PHONY: help lint verify-deps verify-hygiene verify-report render dep-build install upgrade package
+.PHONY: help lint verify-deps verify-hygiene verify-report verify-sites render dep-build install upgrade package
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | \
 		awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2}'
 
-lint: ## Run helm lint
+lint: verify-sites ## Run helm lint
 	helm lint . $(PRIVATE_ARGS)
+
+verify-sites: ## Assert no CronJob is lit on two sites at once (base + every site overlay)
+	./scripts/verify-site-exclusivity.py
 
 verify-deps: ## Assert vendored charts/*.tgz match Chart.yaml (name+version, no stale leftovers)
 	./scripts/verify-chart-deps.sh
