@@ -415,6 +415,40 @@ apply 前先确认 broker 是空闲的（日志只有 `GET /health`），否则�
 两个 `guide-cases-*` 不在 chart 里，apply 不会碰它们（没有 prune）——它们是
 `verify-pins` 里的「R2 无主」那一档，别顺手删，也别当成缺项。
 
+### 2026-11-14 server1 曾连续三天 DiskPressure（上线前必须知道的容量事实）
+
+清 `scraw` 的幽灵 pod 时撞出来的：3,115 个 pod 里 **2,846 个**是已归零的
+ReplicaSet `legal-auth-broker-5d9ffff556` 的失败 pod，创建日 11-10（782）/
+11-11（1,428）/11-12（640）。抽样 pod 写得很直白：
+
+```
+phase: Failed   reason: Evicted
+message: Pod was rejected: The node had condition: [DiskPressure].
+container: ContainerStatusUnknown（The container could not be located when the pod was terminated）
+```
+
+所以那三天里 broker 是**被驱逐→RS 补新→再驱逐**的循环，不是「起不来」。
+**没有任何通道报过**：那台机没有 mail，`node-health-alerts` 跑在 fd-prod 看不见它，
+`check_cronjob_health.py` 只判 Job condition、根本不经过 ReplicaSet 的 pod。
+
+处置与判据：
+
+```bash
+# 只删死 RS 的失败 pod：hash 属于一个 DESIRED 0 / CURRENT 0 的旧 RS ⇒ 不可能命中活的
+kubectl -n scraw delete pods -l pod-template-hash=5d9ffff556 \
+  --field-selector status.phase=Failed --wait=false        # 3115 -> 242
+```
+
+剩下的 52 个 `Evicted` 属于爬虫 Job 自己（数量小、留作证据，不清）。
+**别用「所有 Failed/Unknown」当选择器**——那会把仍有所有者的运行期证据一起删掉。
+
+**当前容量**（2026-11-14 实测，`/api/v1/nodes/vm-0-15-debian/proxy/stats/summary`）：
+根分区 **31.2 / 41.7 GB（75%，剩约 10.5 GB）**，imageFs 6.5 GB，节点
+`Ready` 且 DiskPressure/PIDPressure/MemoryPressure 全 `False`。这台机同时承着
+`/srv/fd-backup`（异地镜像与备份落点）与唯一的 local-path 卷
+（`scraw/legal-auth-rmfyalk-acct001-profile`，2 GiB）。**往上排夜间作业前先核这一项**——
+盘满那次的表现不是宕机，是一批 pod 静默消失。
+
 ## 出片记录 2026-11-11：统一到 `sha-30f5179`
 
 出片通道：公开镜像仓 `scs001/fd-law-data`（免费线），run `42885942197` 全绿
