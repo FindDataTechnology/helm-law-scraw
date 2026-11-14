@@ -54,6 +54,7 @@ spec:
               imagePullPolicy: {{ $.Values.images.legalSources.pullPolicy }}
               {{- include "helm-law-scraw.legalResources" $.Values.legalSources | nindent 14 }}
               env:
+                {{- include "helm-law-scraw.legalNodeEnv" $.Values.legalSources | nindent 16 }}
                 {{- include "helm-law-scraw.legalRustfsEnv" $.Values.legalSources | nindent 16 }}
                 {{- include "helm-law-scraw.legalTelemetryEnv" (dict "telemetry" $.Values.legalSources.telemetry "imageTag" $.Values.images.legalSources.tag) | nindent 16 }}
                 {{- with $source.extraEnv }}

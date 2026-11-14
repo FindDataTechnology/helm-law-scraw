@@ -273,7 +273,10 @@ legalSources:
       schedule: "30 3 * * *"
       suspend: false
       concurrencyPolicy: Forbid
-      activeDeadlineSeconds: 14400
+      # == live。2026-11-14 核对：chart 原来写 14400（4h），线上已是 28800——
+      # 09-24 那笔 `96b6892` 把四个 catalog 爬虫的墙抬到 8h（CCDI 撞过 4h 墙），
+      # 只改了清单没回写 chart。整份 apply 会把墙砍回 4h，慢轮直接被杀。
+      activeDeadlineSeconds: 28800
       sourceLabel: true
       command: ["node", "bin/gov-rules-crawl.mjs", "--rate-ms", "1100"]
     party-regulation-library:
@@ -281,7 +284,8 @@ legalSources:
       schedule: "40 3 * * *"
       suspend: false
       concurrencyPolicy: Forbid
-      activeDeadlineSeconds: 14400
+      # == live（同上，14400 → 28800）。
+      activeDeadlineSeconds: 28800
       sourceLabel: true
       command: ["node", "bin/party-regulation-crawl.mjs", "--rate-ms", "1100"]
     ccdi-supervisory-regulations:
@@ -371,6 +375,11 @@ legalSources:
   telemetry:
     secretName: federation-db
     urlKey: url
+  # V8 堆上限。09-24 `96b6892` 实测：跑的这台只有 3.7GB，堆过 ~800MB 就被内核
+  # OOM-kill（不是内存泄漏，list 阶段的分配抖动就够）。此前只加在 k8s/ 那份
+  # 「仅作参考」清单里，线上 12 个作业是手工带上这个 env 的——chart 缺它，
+  # 换命名空间/新集群时就丢，回来就是节点级 OOM。空串表示不加这个 env。
+  nodeOptions: "--max-old-space-size=384"
   resources:
     requests:
       cpu: 100m

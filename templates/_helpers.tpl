@@ -179,6 +179,21 @@ Context: dict with telemetry + imageTag
 {{- end -}}
 
 {{/*
+V8 堆上限 env（legalSources.nodeOptions）。
+为什么单独一条：09-24 `96b6892` 实测这台 3.7GB 的节点会把 V8 堆过 ~800MB 的
+爬虫 OOM-kill（list 阶段的分配抖动就够，不是泄漏），此前这个 env 只存在于
+`fd-law-data/k8s/` 那份「仅作参考、不要 apply」的清单里，线上靠手工带——
+chart 缺它 ⇒ 换命名空间/新集群就丢，回来是节点级 OOM。空值时整段不渲染。
+Context: .Values.legalSources
+*/}}
+{{- define "helm-law-scraw.legalNodeEnv" -}}
+{{- with .nodeOptions }}
+- name: NODE_OPTIONS
+  value: {{ . | quote }}
+{{- end }}
+{{- end -}}
+
+{{/*
 Resource limits hard gate for legal-line federation members (change legal-line-federation).
 Context: .Values.legalSources
 */}}

@@ -155,6 +155,28 @@ Job 回填 `crawl_runs`，`FED_NAMESPACE=scraw`，两边看的是不同 Job 集�
 （或 `make render`；**两个 -f 都要** —— 内网端点与账号标识在带外那份里）
 - **runner_image 同步义务**：升级 `images.legalSources.tag` 时必须同步 `crawl_sources.runner_image`（dispatcher 触发的 Job 用登记值，不是 chart 值）——drill 4.2 曾因此跑旧镜像。
 
+### chart 管不到的两个对象（apply 不会重建它们）
+
+- **`flk-law-embed`**（05:30，读 `laws-export` 分片写 Qdrant）——真源是
+  `fd-law-data/k8s/flk-embed-cronjob.yaml`，手工 apply；chart 里没有它的模板。
+- **`federation-observer`**（*/15，按**本集群** scraw 的 Job 历史回填 `crawl_runs`，
+  `FED_NAMESPACE=scraw`）——两个集群各跑一个，各自看自己的 Job 集合，不是重复。
+
+这两条不在 chart 里 ⇒ 换命名空间/新集群时**必须单独 apply**，否则 embed 会静默停摆
+（`flk-law-load` 就吃过这个亏：10-06 chart 接管时漏了它，40 天只爬不载）。
+
+### 2026-11-14 收敛的 chart↔线上漂移
+
+- `legalSources.nodeOptions: "--max-old-space-size=384"` → 新增 `legalNodeEnv` helper，
+  供给 12 个 crawl/load/report。原来只在「仅作参考」的 `k8s/` 清单里，线上靠手工带；
+  chart 缺它，换集群就丢回节点级 OOM（3.7GB 机器，V8 堆过 ~800MB 即被 OOM-kill）。
+- `gov-rules-library` / `party-regulation-library` 的 `activeDeadlineSeconds`
+  14400 → **28800**（对齐线上）。09-24 `96b6892` 已把四个 catalog 爬虫的墙抬到 8h
+  （CCDI 撞过 4h 墙），但那笔只改了清单、没回写 chart——整份 apply 会把墙砍回 4h。
+- 仍存的**惰性**差异：chart 多一个 `FD_RUNNER_IMAGE_TAG`（被镜像自报的
+  `/app/IMAGE_TAG` 压过，无行为影响）；线上 `legal-sources-report` 多一个
+  `FD_RUN_STARTED`（带外加的，apply 不会删）。
+
 ## 出片记录 2026-11-11：统一到 `sha-30f5179`
 
 出片通道：公开镜像仓 `scs001/fd-law-data`（免费线），run `42885942197` 全绿
