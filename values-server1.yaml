@@ -31,7 +31,9 @@ legalSources:
     gov-rules-library:
       suspend: true
     party-regulation-library:
-      suspend: true
+      # 2026-11-14 切换试点（第一源）：真爬已在 server1 实测通过（Job Complete 17s、
+      # crawl_runs 自报 image_tag=sha-c33bf67、日志可见）。master 侧同源已关。
+      suspend: false
     ccdi-supervisory-regulations:
       suspend: true
   loaders:

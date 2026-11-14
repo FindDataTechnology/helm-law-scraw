@@ -124,6 +124,19 @@ party-crawl-pilot` 手工跑一轮：
 配方里必须写 `apply -n scraw -f -`，误建后按精确名删掉（`kubectl -n default
 delete cronjob party-regulation-crawl`），别去 grep 宽匹配。
 
+### 切换进度（逐源翻，别一次全翻）
+
+| 源 | 生效站点 | 依据 |
+|---|---|---|
+| `party-regulation-crawl` | **xinru-server1**（2026-11-14 试点） | master 侧 `suspend: true`、server1 侧 `false`；真爬已在 server1 实测（Job Complete 17s、`crawl_runs` 自报 `sha-c33bf67`、日志可见）。观察一个 03:40 轮次 |
+| 其余 6 crawl + 5 load + report + flkLawCrawl | xinru-master（原状） | 未翻 |
+
+回滚这一源＝两处翻回去并重推：`values.yaml` 的 `party-regulation-library.suspend`
+改回 `false`、`values-server1.yaml` 的同项改回 `true`，然后
+`kubectl --context xinru -n scraw patch cronjob party-regulation-crawl --type=merge
+-p '{"spec":{"suspend":false}}'` 与 server1 侧对称 patch。**load 不动**：它读的是
+同一个 `laws` 桶、写同一个库，与 crawl 在哪台机无关。
+
 ### 切换配方（一次改动，两边同时翻）
 
 ```bash

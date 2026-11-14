@@ -304,7 +304,10 @@ legalSources:
     party-regulation-library:
       name: party-regulation-crawl
       schedule: "40 3 * * *"
-      suspend: false
+      # 2026-11-14 切换试点：本源的执行者迁到 xinru-server1（裁定见 APPLY-NOTES
+      # 「宿主切换」）。两侧必须同一次改动里翻，只翻一侧＝两个执行者写同一张
+      # crawl_runs。`make verify-sites` 拒「两边都活」。
+      suspend: true
       concurrencyPolicy: Forbid
       # == live（同上，14400 → 28800）。
       activeDeadlineSeconds: 28800
