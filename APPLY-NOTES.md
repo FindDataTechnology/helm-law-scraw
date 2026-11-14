@@ -106,6 +106,24 @@ xinru-server1」、tasks 3.3「站点 dispatcher 部署于 xinru-server1」已�
 三面都过，且探针已删（不留对象）。所以配方第 2 步的「能不能跑」已经有答案，
 真正剩下的未知只有**吞吐与资源**（server1 是较小的 VM，限额在 chart 里已有）。
 
+**再加一条真爬实测（同日晚些，比三个探针更硬）**：把 chart 渲染出的
+`party-regulation-crawl` 原样 apply 到 server1（**`suspend: true` 保持不变**，
+所以没有动排期），再 `kubectl create job --from=cronjob/party-regulation-crawl
+party-crawl-pilot` 手工跑一轮：
+
+- Job `Complete 1/1`，17s（`04:49:51Z → 04:50:08Z`）；
+- `crawl_runs` 新增一行 id 5882 `success`、**`image_tag = sha-c33bf67` 自带正确**
+  （对照 11-13 那两行的 `b63d0d1` / `e584fc5`，正是徽谎与新片的差别）；
+- 日志是结构化 JSON（含 `parts`/`failures`/`aborted`/`emitted`）⇒ 那条
+  「log 形参没人注入＝生产日志一行都没有」的坑在新片上确实修好了，凌晨轮次的
+  可观测性可以指望它。
+
+**踩到的坑（写在这里免得再踩）**：`helm template` 的产物**不带 namespace**，
+`kubectl apply -f` 会把这批对象建到 context 的 `default` 里——我第一次就建出了
+`default/party-regulation-crawl`，读回 `-n scraw` 才发现镜像没变（那是另一份对象）。
+配方里必须写 `apply -n scraw -f -`，误建后按精确名删掉（`kubectl -n default
+delete cronjob party-regulation-crawl`），别去 grep 宽匹配。
+
 ### 切换配方（一次改动，两边同时翻）
 
 ```bash
