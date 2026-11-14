@@ -344,6 +344,32 @@ legalSources:
       suspend: false
       source: ccdi-supervisory-regulations
       command: ["node", "bin/ccdi-supervisory-load.mjs", "--source", "ccdi-supervisory-regulations"]
+    flk-law-load:
+      # 04:30，接在 flk-law-crawl（02:30 写 incremental/）之后、flk-law-embed（05:30
+      # 读 laws-export 分片）之前。本作业在 chart 里**从未存在过**：2026-10-06
+      # 建 loaders 这一段时漏了它，于是 flk 的 load 环节自那天起停摆——爬取照常
+      # 往 S3 写分片（10-09/10-11/10-13/10-17/10-21/10-28/10-29/10-31/11-07/11-11/
+      # 11-12 共 11 份），law_db.laws 的 flk 行却停在 2026-09-24，laws-export 没有
+      # 新分片，embed 每天「success rows=0」。2026-11-14 已用一次性 Pod 补齐
+      # （insertedLaws=59、chunks=2031、exportShards=10，laws 3245→3304），
+      # 但那是手工补的，不解决每天新增的积压。
+      #
+      # ⚠ 现在必须保持 suspend: true，解除条件是**镜像侧**先满足：
+      #   目标集群上该作业实际跑的 fd-law-data 镜像，其源码必须含 3fa5d29
+      #   （`SELECT title, to_jsonb(laws) ->> 'doc_number' …`）。旧片里
+      #   findCrossGenerationDuplicate 裸投影 doc_number，而生产 laws 表没有
+      #   这一列 ⇒ 每条记录抛 42703、整批一条也写不进去，只会在 crawl_runs
+      #   留一行 running 然后被预算回收。
+      #   判据（别拿"chart 改了"当"线上跑了"）：`kubectl -n scraw get cronjob
+      #   flk-law-load -o jsonpath='{.spec.jobTemplate.spec.template.spec.containers[0].image}'`
+      #   的 tag 落在 sha-f01a776 或更新（f01a776 的源码已含 3fa5d29，2026-11-14 核）。
+      #   把 suspend 改 false 的那一笔，必须同时确认线上 tag 已到位——
+      #   "启用了但跑着旧代码"正是本仓反复踩的形态。
+      schedule: "30 4 * * *"
+      suspend: true
+      source: flk-law
+      activeDeadlineSeconds: 7200
+      command: ["node", "bin/flk-load.mjs"]
   telemetry:
     secretName: federation-db
     urlKey: url
