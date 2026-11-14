@@ -107,7 +107,7 @@ xinru-server1」、tasks 3.3「站点 dispatcher 部署于 xinru-server1」已�
 |---|---|---|
 | 镜像 | `kubectl --context xinru-server1 -n scraw run pullprobe --rm -i --image=…:sha-c33bf67 -- node -e …` | 拉起并执行成功（server1 节点自带 ccr 认证，无需 pull secret） |
 | PG | 同镜像 Pod，`FD_CRAWL_DB_URL ← secret federation-db/url`，跑一次 `select current_database()` | `fd_open_data` 通，`crawl_runs` 可读（party-regulation 48 行） |
-| 对象存储 | `createS3({endpoint: 100.64.0.5:9000, …secret flk-law-crawl-credentials})` + `listObjects('laws', {prefix:'legal-sources/report/'})` | 通，列到 40 个报告对象 |
+| 对象存储 | `createS3({endpoint: <rustfs 内网端点，见 values-private.yaml>, …secret flk-law-crawl-credentials})` + `listObjects('laws', {prefix:'legal-sources/report/'})` | 通，列到 40 个报告对象 |
 
 三面都过，且探针已删（不留对象）。所以配方第 2 步的「能不能跑」已经有答案，
 真正剩下的未知只有**吞吐与资源**（server1 是较小的 VM，限额在 chart 里已有）。
@@ -130,33 +130,40 @@ party-crawl-pilot` 手工跑一轮：
 配方里必须写 `apply -n scraw -f -`，误建后按精确名删掉（`kubectl -n default
 delete cronjob party-regulation-crawl`），别去 grep 宽匹配。
 
-### 切换前提：两站点的凭据必须一致（`make verify-secrets`）
+### 切换前提：站点上「会跑的对象」引用的凭据必须齐备（`make verify-secrets`）
 
 **「能连」不等于「能用同一份凭据」。** 2026-11-14 的连通性探针走的是 crawl 库
 `fd_open_data` + `laws` 桶，全绿；可 load / report 走的是另一个库、另一份口令，
 探针完全看不到。逐键 sha256 比下来（脚本只打 8 位哈希与长度，从不打印值）：
 
-| secret / key | master | server1 | 影响 |
-|---|---|---|---|
-| `flk-law-pg-credentials` / `pg-password` | `3515c8f6`(28B) | ~~`d40c7c11`~~ → **已对齐 `3515c8f6`**（2026-11-14） | 原为 load/report 的硬阻塞；对齐后 server1 上 `create job --from=cronjob/rmfyalk-case-load` 实测 **Complete 1/1、62s**、日志回 `laws: 32355 / law_chunks: 362476 / unchanged: true` |
-| `flk-embed-credentials` / `embed-api-key` | 有 | **没有** | **flk-law-embed 在 server1 起不来** |
-| `legal-identity-rmfyalk-acct001` / `crawl_proxy_url`、`login_proxy_url` | 同值(54B) | 同值(49B，二者相等但≠master) | rmfyalk 会走另一个代理；是设计还是漂移待确认 |
-| `federation-db`/`url`、`flk-law-crawl-credentials` 两个 dashed 键、`legal-auth-broker` 三键 | — | **同值** | crawl 可以搬（party 试点已实测通过） |
+| secret / key | 两站点 | 判定 |
+|---|---|---|
+| `flk-law-pg-credentials` / `pg-password` | `3515c8f6` 两侧同值（2026-11-14 对齐） | 曾是 load/report 的硬阻塞；对齐后 server1 上 `create job --from=cronjob/rmfyalk-case-load` 实测 **Complete 1/1、62s**、日志回 `laws: 32355 / law_chunks: 362476 / unchanged: true` |
+| `flk-embed-credentials` / `embed-api-key` | 只有 xinru 有 | **不是缺陷**：server1 侧 `flk-law-embed` 挂起、不在必需集里。谁要在 server1 点亮 embed，必需集立刻包含它、闸立刻红 |
+| `legal-identity-<法务账号>`（全名见集群 Secret）/ `crawl_proxy_url`、`login_proxy_url` | 两侧不同（54B vs 49B，**proxy id 相同**） | 已裁决（R3，带解除条件）：同一身份的两个活着的站点本地出口，见下文 |
+| `federation-db`/`url`、`flk-law-crawl-credentials` 两个 dashed 键、`legal-auth-broker` 三键 | 两侧同值 | crawl/load/report 都可搬 |
 
-所以**逐源翻的顺序被这份矩阵决定**，不是按「源有多轻」：
-crawl 类今天就能搬；load / report 要先对齐 `pg-password`；`flk-law-embed` 要先补
-secret。`verify-secrets` 红了就别翻，它列的四条正是四处会在真跑时才炸的差异。
+**判据在 2026-11-14 重写过一次，别按旧口径读它**：旧版要求「chart 引用的每个键在两站点
+都同值」，于是 embed 被报成红——那是在要求一份**永远不会被读**的凭据。现在必需集按站点
+求，取两路并集：**线上在跑的对象**（`suspend=false` 的 CronJob ＋ 副本 >0 的 Deployment）
+∪ **该站点渲染里点亮的对象**。前者回答「现在会不会起不来」（11-13 那 10 轮 load 失败就是
+它抓的：当时 server1 的 load 对象是活的，overlay 写没写都不算），后者回答「下次 apply 之后
+会不会起不来」。R2 只在**两站点都必需**时才要求同值。
+
+**proxy 那条为什么判成「已裁决」而不是对齐**：同一个 proxy id（两站点 id 值逐字节相同），
+两个 URL 实测都活着、出口 IP 不同——xinru 出 `134.175.46.69`，server1 出
+`111.230.147.208`（异地备份机）。所以不是「一份拷贝过期」，而是两个站点各自的本地方案。
+按 `legal-line-federation` 的裁定（宿主 = server1）迁移完成后，另一站点 broker 应置 0 副本、
+两侧收敛到留用站点的值——**这就是该条在脚本里的解除条件**。
 
 **2026-11-14 处置**：`pg-password` 已按「先快照 server1 原值 → 用 master 的 data 整份
 覆盖（secret 的 patch 会整体替换 data，不能只补一个键）→ 逐键哈希复核 → 真跑一轮 load
 验证」四步对齐，server1 侧的 load 从「连着 10 轮 Password 认证失败」变成
-`Complete 1/1`。剩下两条仍是阻塞，且都不该由我单方面决定：
-`flk-embed-credentials`（要不要让 embed 也搬过去）、`legal-identity-rmfyalk-acct001`
-的两个 proxy_url（换站点就换代理出口，是设计还是漂移要仓主定）。
+`Complete 1/1`。
 
-**为什么只比 chart 引用的那些键**：两份 secret 的键集本就会因为 `envFrom` 与显式
-`secretKeyRef` 两种写法分叉（实测 server1 的 `flk-law-crawl-credentials` 是超集，
-多了 `RUSTFS_*` 大写键）；比全量会把这种设计差异报成红。只比 pod 真会读的那几个。
+**为什么只比「被引用的键」而不是整份 secret**：两份 secret 的键集本就会因为 `envFrom` 与
+显式 `secretKeyRef` 两种写法分叉（实测 server1 的 `flk-law-crawl-credentials` 是超集，
+多了 `RUSTFS_*` 大写键）；比全量会把这种设计差异报成红。
 
 ### 切换进度（逐源翻，别一次全翻）
 
@@ -386,6 +393,27 @@ Job 回填 `crawl_runs`，`FED_NAMESPACE=scraw`，两边看的是不同 Job 集�
   `FD_SCHEMA_MANAGED`（线上没它也已稳定跑出 `rows=47309`，加不加都只是「跳过 DDL」）、
   线上多带外加的 `FD_RUN_STARTED`（apply 不会删）。这三处都**不动线上**——
   为对齐而改一个正在正常出数的作业，风险大于收益。
+
+### 2026-11-14 server1 侧整机收敛（备站从「三代前」追到当前片）
+
+把 `values-server1.yaml` 应用到 server1 之前，那边的法律线是**手工维护的陈旧副本**：
+15 个 CronJob 全钉 `fd-law-data:sha-b63d0d1`（chart 已是 `sha-c33bf67`），
+`legal-auth-broker` 停在 `legal-auth-broker:sha-b726e1f`，另有两个 chart 里根本没有的
+`guide-cases-crawl` / `guide-cases-load`（10-06 建、一直挂起、零 Job 历史、`guide-cases-*`
+是 chart 不渲染的无主源，留着不动）。
+
+处置：`make render | kubectl --context xinru-server1 apply -n scraw -f -`（渲染产物
+**不带 namespace**，漏 `-n scraw` 会建出 `default/…`）。复核方式不是看 apply 的
+`configured` 字样，而是**逐对象比 render 与 live 的镜像和 suspend**：
+
+```
+-> 不一致 0 处          # 17 个对象（1 Service + 1 Deployment + 15 CronJob）
+broker rollout: successfully rolled out; 1/1 legal-auth-broker:sha-c33bf67
+```
+
+apply 前先确认 broker 是空闲的（日志只有 `GET /health`），否则这次滚版会打断登录。
+两个 `guide-cases-*` 不在 chart 里，apply 不会碰它们（没有 prune）——它们是
+`verify-pins` 里的「R2 无主」那一档，别顺手删，也别当成缺项。
 
 ## 出片记录 2026-11-11：统一到 `sha-30f5179`
 

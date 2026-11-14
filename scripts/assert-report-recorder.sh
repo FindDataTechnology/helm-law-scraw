@@ -26,22 +26,17 @@ fi
 rm -f /tmp/depcheck.$$
 
 # 2026-11-12：内网端点 / PG 主机 / 法务身份标识已移入带外 values-private.yaml，
-# values.yaml 里留空 + 模板 required 守卫。门在 CI 里没有那份文件，所以用**占位值**
-# 渲染：门验的是记录器代码形态，与真实地址无关，因此不能因此变红，也不能靠
-# 「跳过渲染」放行（那会让门假绿）。
-PRIVATE_ARGS=(
-  --set flkLawCrawl.rustfs.endpoint=http://rustfs.invalid:9000
-  --set legalSources.rustfs.endpoint=http://rustfs.invalid:9000
-  --set legalSources.postgres.host=pg.invalid
-  --set authBroker.rustfs.endpoint=http://rustfs.invalid:9000
-  --set authBroker.postgres.host=pg.invalid
-  --set wenshuCrawl.rustfs.endpoint=http://rustfs.invalid:9000
-  --set images.wenshuCrawl.repository=ci/wenshu
-  --set private.accountId=ci
-)
-
-RENDERED="$(helm template "$RELEASE" "$CHART_DIR" --namespace "$NAMESPACE" "${PRIVATE_ARGS[@]}" 2>&1)" || {
-  printf '✗ helm template 失败：\n%s\n' "$RENDERED"; exit 1; }
+# values.yaml 里留空 + 模板 required 守卫。门在 CI 里没有那份文件，所以必须还能渲出来：
+# 门验的是记录器代码形态，与真实地址无关，不能因此变红，也不能靠「跳过渲染」放行
+# （那会让门假绿）。
+#
+# 2026-11-14 改为调 `make -s render`，不再自己拼 helm 参数：原先这里抄了一份占位
+# `--set` 列表，而模板后来新增了 `flkLawEmbed.{rustfs.endpoint,qdrant.url}` 两个
+# required 键——抄件没跟上 ⇒ 干净克隆（没有 values-private.yaml）下这条门直接
+# `✗ helm template 失败`。同一份 helm 参数存在两处，就一定会有一处先烂。
+if ! RENDERED="$(make -s -C "$CHART_DIR" render 2>&1)"; then
+  printf '✗ make render 失败：\n%s\n' "$RENDERED"; exit 1
+fi
 
 # 只取目标 CronJob 那一段，避免别的文档里恰好出现同名字符串导致假通过。
 BLOCK="$(printf '%s\n' "$RENDERED" | awk -v name="$NAME" '

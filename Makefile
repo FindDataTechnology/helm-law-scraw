@@ -10,6 +10,8 @@ PRIVATE_VALUES := values-private.yaml
 ifeq ($(wildcard $(PRIVATE_VALUES)),)
 PRIVATE_ARGS := \
 	--set flkLawCrawl.rustfs.endpoint=http://rustfs.invalid:9000 \
+	--set flkLawEmbed.rustfs.endpoint=http://rustfs.invalid:9000 \
+	--set flkLawEmbed.qdrant.url=http://qdrant.invalid:6333 \
 	--set legalSources.rustfs.endpoint=http://rustfs.invalid:9000 \
 	--set legalSources.postgres.host=pg.invalid \
 	--set authBroker.rustfs.endpoint=http://rustfs.invalid:9000 \
@@ -21,7 +23,7 @@ else
 PRIVATE_ARGS := -f $(PRIVATE_VALUES)
 endif
 
-.PHONY: help lint verify-deps verify-hygiene verify-report verify-sites verify-pins verify-runs verify-secrets render dep-build install upgrade package
+.PHONY: help lint render-base verify-deps verify-hygiene verify-report verify-sites verify-pins verify-runs verify-secrets render dep-build install upgrade package
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | \
@@ -54,6 +56,9 @@ verify-report: verify-deps verify-hygiene ## Assert the report CronJob keeps its
 
 render: ## Render the chart for xinru (needs values-private.yaml for the internal endpoints)
 	helm template $(RELEASE) . --namespace $(NAMESPACE) -f values-server1.yaml $(PRIVATE_ARGS)
+
+render-base: ## Render the chart for the base site (= xinru-master, values.yaml only)
+	helm template $(RELEASE) . --namespace $(NAMESPACE) -f values.yaml $(PRIVATE_ARGS)
 
 dep-build: ## Fetch Bitnami subchart dependencies
 	helm dependency build .
