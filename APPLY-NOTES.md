@@ -446,7 +446,7 @@ kubectl -n scraw delete pods -l pod-template-hash=5d9ffff556 \
 根分区 **31.2 / 41.7 GB（75%，剩约 10.5 GB）**，imageFs 6.5 GB，节点
 `Ready` 且 DiskPressure/PIDPressure/MemoryPressure 全 `False`。这台机同时承着
 `/srv/fd-backup`（异地镜像与备份落点）与唯一的 local-path 卷
-（`scraw/legal-auth-rmfyalk-acct001-profile`，2 GiB）。**往上排夜间作业前先核这一项**——
+（`scraw/legal-auth-<法务账号>-profile`，2 GiB，全名见集群 PVC 列表）。**往上排夜间作业前先核这一项**——
 盘满那次的表现不是宕机，是一批 pod 静默消失。
 
 ## 出片记录 2026-11-11：统一到 `sha-30f5179`
