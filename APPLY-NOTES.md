@@ -273,6 +273,42 @@ pending_run_id/identity_alias/metrics/outcome/error_class/parse_error`，`metric
 所以「哪一行是哪台机」只能靠 `image_tag` 反推——**两站点对齐到同一片之后连这也分不出来**，
 主判据因此必须是「一个窗内只有一条 success」，不能依赖 tag。
 
+## 渲染↔线上漂移（`make verify-live`）—— 声明面绿 ≠ 线上是那样
+
+上面所有门都有一个共同盲区：**它们验的是渲染产物**。`make verify-report` 断言
+「日报把 `load_stalled` 写进 `crawl_runs`」，绿了很久——而 2026-11-14 逐字段比下来，
+master 线上的 report `args` 少了整段 `loadStalled` recorder，**门断言的性质在生产里
+根本不存在**。同一次比对还捞出 12 个对象没有 `resources` limits、两个对象
+`FD_RUNNER_IMAGE_TAG` 停在旧片、report `backoffLimit` 是集群缺省 6。
+
+这道闸就是那半边：对每个站点用该站点自己的 values 渲染，**把渲染产物经
+`kubectl create --dry-run=client -o json -f -` 转成真正的 JSON**（不自己解 YAML——
+本机 homebrew python 没有 PyYAML，而 gate 不该依赖解释器口味），再与集群同名对象
+逐字段比 `image / command / args / env（名字+来源）/ resources / suspend / schedule /
+backoffLimit / activeDeadlineSeconds`。
+
+```bash
+make verify-live                      # 两个站点都查；EXIT 1 有漂移 / 2 判不出
+python3 scripts/verify-live-drift.py --site xinru
+python3 scripts/verify-live-drift.py --self-test   # 8 条自证（含「args 少一段」）
+```
+
+四条判据纪律：
+
+- **比 `resources` 先归一化量**：render 出 `cpu: 1`（整数），API 读回 `'1'`（字符串），
+  直接比会造 13 条假红——首版就这么假红过，归一后残差 0。
+- **`env` 按「名字+来源」比，不比值**：值来自 Secret 时两侧都只有 key 名，比的是
+  引用一致性；真值比对照 `verify-secrets`。
+- **R2/R3 只报事实**：chart 有、集群没有（还没 apply）与集群有、chart 不渲染
+  （`guide-cases-*` 无主源、`federation-observer`/`gost-egress`/`proxy-control`
+  站点级作业）都不是缺陷。
+- **判不出退 2**：渲染失败、kubectl 读不到、某一侧 0 个可比对象——「什么都没比」
+  不许读成「一致」。
+
+它一上线就抓到一处：server1 线上的 `LEGAL_PAUSED_SOURCES` 仍把
+`party-regulation-library` 算进暂停名单（那源在 server1 是亮的），补一次
+`make render | kubectl --context xinru-server1 apply -n scraw -f -` 后两侧都逐字段一致。
+
 ## 联邦 pin 必须等于 chart 的镜像（`make verify-pins ROWS=…`）
 
 `crawl_sources.runner_image`（`kind='federated'`）是 **chart 镜像的手抄副本**：
