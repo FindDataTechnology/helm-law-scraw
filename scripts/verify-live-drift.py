@@ -78,7 +78,14 @@ def norm_res(res) -> dict:
 
 
 def envsig(container) -> list:
-    """[(name, 来源)] —— 区分 secretKeyRef / configMapKeyRef / 字面值。"""
+    """[(name, 来源)] —— 区分 secretKeyRef / configMapKeyRef / 字面值。
+
+    字面值里 `value: ""` 与「这个键不存在」必须视为同一个东西：API server 会把
+    空串值**整个丢掉**（2026-11-14 实测：apply 声明 `LEGAL_PAUSED_SOURCES: ""`，
+    读回是 `{"name": "LEGAL_PAUSED_SOURCES"}` 没有 value 字段），而运行期两者等价
+    ——env 条目还在，变量就是空串。不归一化的话，每一个「清空某个 env」的改动都会
+    永远报一条假红（正是本闸第一次改 `LEGAL_PAUSED_SOURCES` 时踩到的）。
+    """
     out = []
     for e in container.get("env") or []:
         fr = e.get("valueFrom") or {}
@@ -87,7 +94,8 @@ def envsig(container) -> list:
         elif "configMapKeyRef" in fr:
             v = "cm:" + fr["configMapKeyRef"]["name"] + "/" + fr["configMapKeyRef"]["key"]
         else:
-            v = "val:" + str(e.get("value"))
+            val = e.get("value")
+            v = "val:" + ("" if val is None else str(val))
         out.append((e["name"], v))
     return sorted(out)
 
@@ -222,6 +230,17 @@ def self_test() -> int:
         bad += 1
     else:
         print("✓ 归一化：cpu 1 == '1'")
+    # 空串 env：render 出 `value: ""`，API 读回来连 value 字段都没有
+    c_render = {"env": [{"name": "P", "value": ""}]}
+    c_live = {"env": [{"name": "P"}]}
+    if envsig(c_render) != envsig(c_live):
+        print(f"✗ 归一化：空串 env 被判成不同 {envsig(c_render)} vs {envsig(c_live)}")
+        bad += 1
+    else:
+        print("✓ 归一化：空串 env == 无 value 字段")
+    if envsig({"env": [{"name": "P", "value": "x"}]}) == envsig(c_live):
+        print("✗ 归一化：非空值被吞掉了")
+        bad += 1
     try:
         compare({}, {})
         print("✗ 判不出：零对象却退 0")

@@ -14,10 +14,13 @@
 # 或反之。只翻一侧就是两个执行者写同一张 crawl_runs、同一批 laws 行。
 # `scripts/verify-site-exclusivity.py`（make verify-sites）拒绝「两边都活」。
 #
-# 现状（2026-11-14）：**裁定目的地是 server1**（2026-10-07 用户五机分布，见
-# openspec archive 2026-10-12-legal-line-federation），但负载仍在 xinru-master 跑
-# ——归档时没人关掉 master 侧。所以本文件此刻全 true（中转站供数中），切换配方见
-# APPLY-NOTES「宿主切换：已裁定，未执行」。
+# 现状（2026-11-14 起）：**裁定目的地是 server1**（2026-10-07 用户五机分布，见
+# openspec archive 2026-10-12-legal-line-federation）。切换已开始，一次只翻一个源：
+# 目前只有 party-regulation-library 的**爬**在这里亮（下面 false），master 侧同源已关；
+# 其余仍全 true（中转站供数中）。party-regulation-load 仍在 master —— 它读的是
+# RustFS 桶（`RUSTFS_ENDPOINT`/`LAWS_BUCKET`），不依赖爬在哪个宿主上落盘，
+# 所以「爬在 server1、装在 master」是自洽的，不是漏翻。
+# 下一步配方见 APPLY-NOTES「宿主切换：已裁定，未执行」。
 # auth-broker 随线部署（Deployment，不是 cron，故不在这里声明）。
 legalSources:
   sources:

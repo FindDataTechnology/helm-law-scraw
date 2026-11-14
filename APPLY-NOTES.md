@@ -238,6 +238,71 @@ legalSources:
 所以它计命中，而不是只报事实。两种读不出也退 2：写成 flow 序列 `[a, b]`、
 或声明了却没有任何条目（零覆盖不许读成「没有例外」）。
 
+#### 同一扇门的第三类：平台派发的源（`platformDispatched`，2026-11-14 当日就撞上了）
+
+上面那处只治了「搬到别的站点」。chart 里还有一族 `suspend: true` 的理由完全不同：
+**它的执行者是平台派发器**（`crawl_sources` 里 `enabled=true` + `schedule` 非空），
+chart 那个 CronJob 只是手工兜底。base 里唯一一条是 `rmfyalk-case-crawl`
+（`10 3 * * *` / `Asia/Shanghai`）——它自建成起就 `suspend: true`，于是**从第一天
+就在日报的暂停名单里**，而没有人意识到这意味着「它断了也会被说成合法暂停」。
+
+这正是本轮的实况，时间线可以逐条对上：
+
+| 时刻（UTC） | 事实 | 出处 |
+|---|---|---|
+| 11-05T20:55 | rmfyalk 最后一次成功 crawl（rows=15） | `crawl_runs` id 4364 |
+| 11-05T21:07 | `state.json.updatedAt` 停在此刻，之后再没动过 | RustFS `laws/legal-sources/rmfyalk-case-library/state.json` |
+| 11-05T21:30 | `legal_documents` 最后一次装载（库里共 22,487 篇） | law_db |
+| 11-07 → 11-10 | 平台每天预拉起登录站，4 次失败 + 1 次 timeout（"human login not completed in time"） | `crawl_login_stations` #65–#71 |
+| 11-10T18:28 | 登录站 #72 拉起后**卡在 `waiting_operator`**，19:28 过 deadline 仍无人回收（Job 被 deadline 杀掉，没上报终态） | #72 `finished_at` 为空 |
+| 11-08 → 11-13T18:00 | 日报**每轮都红**：`exit=2 / stale=rmfyalk-case-library` | `crawl_runs` id 5018…5755 |
+| 11-13T20:12 | 新版镜像上产（带 `pausedSources`），日报**转绿**——**同一刻没有任何数据进库** | id 5779 起全 success |
+| 11-10 → 11-14 | `pending_runs` 里 `rmfyalk-case-crawl` **19 次 failed**，预拉起**一次都没再开站** | panel 日志每 5 分钟 `prearm: no station needed this pass` |
+
+最后两行是两处独立缺陷叠在一起：
+
+1. **预拉起被僵尸站永久挡住**（`fd-open-data-mcp` `station_ops.py`）。超时兜底
+   `_apply_timeouts` 是「读时生效」（panel 列站 / 打开 VNC 才跑），而那个 5 分钟
+   后台循环 `prearm_plan` **从不读站表**，于是 `status in ('launching','waiting_operator')`
+   把 #72 永远当成「操作者正看着」。修法两条，缺一不可：
+   - `prearm_plan` 的 open-station 判据加 `deadline_at > now`（按**有效窗口**判，
+     不按行状态判）——决策不再被僵尸站挡住；
+   - `prearm_tick` 先跑 `_apply_timeouts` 再规划——状态真的被收成 `timeout` 并留痕，
+     Console 上不会永远挂着一个「等待操作者」。
+   自证：两条新用例在旧判据下都红（plan 返回空、tick 不改状态），换新判据即绿。
+2. **日报把它算成「合法暂停」**，于是第 1 条从 11-13T20:12 起彻底不可见。
+
+修法（chart 侧）：
+
+```yaml
+legalSources:
+  activeElsewhere:     [party-regulation-library]   # 别的站点在跑
+  platformDispatched:  [rmfyalk-case-library]       # 平台派发器在跑
+```
+
+模板把两个列表**并起来**排除出暂停名单（`helm-law-scraw.legalPausedSources`）。
+改完 base 渲染出 `LEGAL_PAUSED_SOURCES=""`：master 上四个源都是自己在跑，
+**一条合法的暂停都没有**，于是任何一条断流都会红——今晚 22:00Z 的日报就会以
+`stale=rmfyalk-case-library` 退出 2，那是**恢复告警**，不是新故障。
+
+`make verify-sites` 新增 **R4b** 守这条白名单，校验方向与 R4 相反：
+
+- `activeElsewhere` 的名字必须**被某份 overlay 点亮**（否则是僵尸例外）；
+- `platformDispatched` 的名字必须在**每一份** overlay 里都 `suspend: true`，
+  否则平台派发器与 chart 会同时跑同一个爬（两执行者、两份 `crawl_runs` 行）；
+- **只数爬，不数装载器**：平台派发拥有的是 crawl，loader 仍归 chart
+  （rmfyalk 就是「爬在平台、装在 master」）。第一版把 loader 也算进来，
+  在真树上立即误报了一条——判据的量词写错会红在合法部署上。
+- 同一名字同时出现在两个列表里 = 「谁在跑」有两个答案，也计命中。
+
+**运维上还剩一件只能人来做的**：rmfyalk 的登录是**人工**的
+（`lib/auth-broker/logins/rmfyalk.js`：headed Chromium + noVNC，等人在页面里
+完成登录，"human login not completed before the session deadline"）。
+#72 已在 13:33Z 用 panel 自己的 `_apply_timeouts` 收成 `timeout`，
+之后 `prearm_plan`（模拟 18:30Z）返回 `rmfyalk/acct001` ——
+今晚 02:25 CST 前那轮预拉起会开出登录站，需要有人在 Console 里完成登录；
+登录成功后按 `authenticated-crawling` 规格，平台会立刻为该 profile 入队一次执行。
+
 ## 单执行者：数据里只许一条 success（`make verify-runs ROWS=…`）
 
 `verify-sites` 判**声明**（两份 values 谁写了 `suspend: false`），`verify-runs` 判
@@ -272,6 +337,44 @@ finished_at/rows_written/error_head/commit_sha/image_tag/created_at/cancel_reque
 pending_run_id/identity_alias/metrics/outcome/error_class/parse_error`，`metrics` 为空）。
 所以「哪一行是哪台机」只能靠 `image_tag` 反推——**两站点对齐到同一片之后连这也分不出来**，
 主判据因此必须是「一个窗内只有一条 success」，不能依赖 tag。
+
+## 试点源的端到端核查：爬在 server1、装在 master（2026-11-14）
+
+翻完试点后「CronJob 绿 + 库里有一行 success」证明不了任何事——那两样在**爬虫什么都没抓、
+loader 什么都没装**的形态下同样成立。所以按「物理前提 → 覆盖 → 新鲜度」三层各要一个数：
+
+**① 两侧是同一份桶（判等打 sha，不打值）**：`RUSTFS_ENDPOINT`（len=22 sha=`4ee0cb66`）／
+`LAWS_BUCKET`（len=4 sha=`8954b4ce`）／`RUSTFS_REGION`（len=9 sha=`487d6534`）在
+**server1 的 party crawl、master 的 party crawl、master 的 party load、master 的 report**
+四处逐字相同；`PG_*` 只出现在 load 与 report（crawl 不碰库，缺它是设计而不是漏配）。
+这是「爬在 A 写桶、装在 B 读桶」能成立的全部物理前提，缺一条就是「两侧都 success、数据永远不落地」。
+
+**② 覆盖是完整的**（这一步才回答「有没有数据」）：今天扫 11 个类目页得到 **203 条**唯一文章路径，
+库内 `party-regulation-library` **196 条**路径（391 行是因为 `source_id = url@v-<hash>`，
+同一文书多个版本各占一行）。站点有而库里没有的 20 条逐条拉下来看标题，**全是评论稿**
+（答记者问／解读／综述／纪实／新旧对照）或一份《中央党内法规制定工作规划纲要》——
+正是 `COMMENTARY_PATTERN` 与「形式关键词」两条过滤器要排掉的东西；库里有而站点目录没有的 13 条
+是 2012–2016 的旧条目（站点改版后下架，数据保留）。目录里最新一条
+《公立医院领导人员管理办法》（2026-08-12 发布）库里已有，`fetched_at = 2026-10-08`。
+
+**③ 0 行/天是正确稳态，不是空转**：`party-regulation-library` 最后一次装载 `2026-10-08`，
+之后每一轮 crawl/load 都是 `success` + `rows_written=0`；而今天扫目录最新仍是 2026-09-18
+⇒ **确实没有新法规可抓**（党内法规一年就几部）。报告侧也不会误报：`loadStalled` 的锚点只认
+`emitted > 0` 的跑批（`lib/legal-sources/report.js`），安静的上游天然不报；`freshnessAt` 取
+run manifest／`state.json`／`last_fetched_at` 三者最大值，所以 crawl 每天推进 state 就够判鲜。
+
+两条判据纪律（当天都踩过）：
+
+- **比覆盖必须先归一化 `source_id`**：库内是 `url@v-<hash>`，且站点在 `www.` / `news.` / `fuwu.`
+  三个宿主上各有一份。直接比原串得到「204 条全缺、391 条全多」——**两边都反**（同族于
+  「拿 `pg_get_viewdef` 逐字比必然假红」：比性质，不比字面）。
+- **`image_tag` 不是站点身份**：11-12 那轮两个执行者都跑 `sha-30f5179`，库里两行一模一样；
+  今天两站已对齐同片，这条限制更硬。判双执行者只能靠「同窗两条 success」。
+  顺带一条结构事实：`crawl_sources.site` 对**全部** federated 源都写着 `xinru-server1`，
+  但除 `rmfyalk-case-crawl`（平台派发，`schedule 10 3 * * *` / `schedule_tz Asia/Shanghai`）
+  之外 `schedule` 都是 null —— 那个 `site` 是**目的地声明**，不是「谁真的跑了」。
+  这也是 `crawl_runs` 该补 `site` 列的理由。
+
 
 ## 渲染↔线上漂移（`make verify-live`）—— 声明面绿 ≠ 线上是那样
 
@@ -308,6 +411,13 @@ python3 scripts/verify-live-drift.py --self-test   # 8 条自证（含「args �
 它一上线就抓到一处：server1 线上的 `LEGAL_PAUSED_SOURCES` 仍把
 `party-regulation-library` 算进暂停名单（那源在 server1 是亮的），补一次
 `make render | kubectl --context xinru-server1 apply -n scraw -f -` 后两侧都逐字段一致。
+
+第二处是**闸自己**的问题，值得单记：把 `LEGAL_PAUSED_SOURCES` 清空时，render 出
+`value: ""`，而 API server 读回来是 `{"name": "LEGAL_PAUSED_SOURCES"}` ——
+**`value` 字段整个消失**（空串等于不写）。运行期两者等价（env 条目还在，变量就是空串），
+但按字面比就会永远报一条假红。所以 `envsig()` 现在把「value 缺失」与「空串」归一成
+同一个东西（自证：`{name:P,value:""}` 必须等于 `{name:P}`，而非空值不许被吞）。
+同族于「比性质不比字面」——**先问这个差异在运行期是否真实存在**，是才计命中。
 
 ## 联邦 pin 必须等于 chart 的镜像（`make verify-pins ROWS=…`）
 
@@ -532,6 +642,38 @@ kubectl -n scraw delete pods -l pod-template-hash=5d9ffff556 \
 `/srv/fd-backup`（异地镜像与备份落点）与唯一的 local-path 卷
 （`scraw/legal-auth-<法务账号>-profile`，2 GiB，全名见集群 PVC 列表）。**往上排夜间作业前先核这一项**——
 盘满那次的表现不是宕机，是一批 pod 静默消失。
+
+### 2026-11-14 夜：给全站 CronJob 加 `resources` 之后的前置调度核查
+
+同一天晚些时候把 `resources`（`requests 100m/256Mi`、`limits 1/2Gi`）收敛进 12 个
+线上对象，而这些作业**此前是 `resources: {}`**。加 `limits` 会带来一个全新的失败形态
+（超限 → `OOMKilled`），所以点火前先把「会不会排不上、会不会更容易被驱逐」核清：
+
+```
+节点 vm-0-15-debian: allocatable cpu=4 / memory=3818800Ki (=3.64 GiB) / pods=110
+  conditions: Ready True, MemoryPressure/DiskPressure/PIDPressure 全 False
+全命名空间 Running pod 6 个，requests 合计 cpu 0.30 / mem 0.26 GiB
+scraw 命名空间: 无 ResourceQuota（`get resourcequota` → No resources found）
+kubelet stats: 根分区 capacity 38.80 GiB / used 31.65 GiB / available 7.13 GiB，
+              imageFs used 5.57 GiB（对照上面 31.2/41.7 GB：同一天里 used 涨了约 2.8 GiB，
+              与 `sha-b63d0d1 → sha-c33bf67` 那次整机滚片拉新层吻合，不是数据增长）
+```
+
+三条结论，都是判据本身而不是「看起来没事」：
+
+- **排得上**：调度只看 `requests`，新值 100m/256Mi 对 3.64 GiB/4 核、剩余 requests
+  3.38 GiB 的节点是零压力；`scraw` 没有 ResourceQuota，也就不存在配额准入这一道。
+- **`limits 2Gi` 不会 OOM**：V8 老生代被 `NODE_OPTIONS=--max-old-space-size=384`
+  （`values.yaml:416`）钉住，实测 RSS 量级远低于 2 GiB——这个 limit 是「防跑飞」的天花板，
+  不是贴着真实用量的紧箍。**别把它读成容量规划**。
+- **但 2 GiB 的 limit 在这台机上不是无限的余量**：节点总内存 3.64 GiB、已用 2.2 GiB（59%），
+  真正富余约 1.4 GiB。某个作业真吃到接近 limit 时，内核会先杀大的，而不是等 k8s 记账——
+  这正是 DiskPressure 那三天的同族形态（磁盘版本）。所以**盘/内存两件都要在排新夜间作业前核**，
+  且 `189 Succeeded + 52 Failed` 这些残留 pod 是故意留的证据，不是待清垃圾。
+
+顺带记一条当天的状态：`scraw` 里 2 个 `Pending` 是 `ContainerCreating`
+（`fd-industry-dispatcher`、`federation-observer`），`PodScheduled True`、
+没有 `FailedScheduling` —— 属于正在拉镜像，**不要当调度失败处理**。
 
 ## 出片记录 2026-11-11：统一到 `sha-30f5179`
 

@@ -225,18 +225,26 @@ def check(dirpath: Path, base_site: str) -> list[str]:
     else_where = ("legalSources", "activeElsewhere")
 
     # 源名（报告的适配器名）→ 哪些站点让它真的跑起来了。
+    # `lit_crawl_by_site` 只数**爬**（`legalSources.sources`），不数装载器：
+    # 平台派发器拥有的是 crawl，loader 仍由 chart 跑（rmfyalk 就是这样：爬在平台、
+    # 装在 master）。把 loader 算进来会让 R4b 对合法部署误报双执行者。
     lit_sources: set[str] = set()
-    for scalars in sites.values():
+    lit_by_site: dict[str, set[str]] = {site: set() for site in sites}
+    lit_crawl_by_site: dict[str, set[str]] = {site: set() for site in sites}
+    for site, scalars in sites.items():
         for label in enabled_labels(scalars):
             parts = label.split(".")
             if len(parts) != 3 or parts[0] != "legalSources":
                 continue
             if parts[1] == "sources":
                 lit_sources.add(parts[2])      # 源名就是 map 的键
+                lit_by_site[site].add(parts[2])
+                lit_crawl_by_site[site].add(parts[2])
             elif parts[1] == "loaders":
                 src = scalars.get(("legalSources", "loaders", parts[2], "source"))
                 if src:
                     lit_sources.add(src)
+                    lit_by_site[site].add(src)
 
     if any("legalSources.activeElsewhere" in s for s in base_skipped):
         raise Unparseable(
@@ -254,6 +262,41 @@ def check(dirpath: Path, base_site: str) -> list[str]:
                     f"R4 僵尸例外 legalSources.activeElsewhere: 列了 {name}，但没有任何"
                     f"站点 overlay 让它 suspend=false → 它现在谁都不跑，留在白名单里"
                     f"会让报告把它判成「合法暂停」而不是「断流」；删掉这一条")
+
+    # R4b `platformDispatched`：由**平台派发器**执行的源。它同样被排除出报告的
+    # 暂停名单（理由同 R4：chart 关着 ≠ 没人跑），但校验方向相反 ——
+    #   · activeElsewhere 的名字必须**被某份 overlay 点亮**，
+    #   · platformDispatched 的名字必须**在每一份 overlay 里都 suspend**，
+    #     否则 chart 的 CronJob 与平台派发器会同时跑同一个源 = 两个执行者。
+    # 2026-11-14 实历（这条例外存在的理由）：rmfyalk 的 chart CronJob 自建成起
+    # 就 suspend（平台派发），于是它一直躺在报告的暂停名单里；源从 11-05 起零产出，
+    # 日报在 11-13T20:12 出片后由红转绿，而**那一刻没有任何数据进库**。
+    dispatcher = ("legalSources", "platformDispatched")
+    if any("legalSources.platformDispatched" in s for s in base_skipped):
+        raise Unparseable(
+            f"{BASE}: legalSources.platformDispatched 写成了本脚本不解析的形态"
+            f"（flow 序列 `[...]`）→ 判不出。改成逐行 `- 源名` 的 block 序列")
+    if dispatcher in base_maps:
+        names = base_items.get(dispatcher, [])
+        if not names:
+            raise Unparseable(
+                f"{BASE}: legalSources.platformDispatched 声明了却读不出任何条目 → "
+                f"判不出（空清单与「读不到」表现相同）")
+        overlap = set(names) & set(base_items.get(else_where, []))
+        for name in sorted(overlap):
+            problems.append(
+                f"R4b 同一条例同时出现在 activeElsewhere 与 platformDispatched: {name}"
+                f" → 一份源只能有一个「谁在跑」的答案，删掉错的那一处")
+        for name in sorted(set(names) - overlap):
+            lit_at = sorted(s for s, lit in lit_crawl_by_site.items() if name in lit)
+            if lit_at:
+                problems.append(
+                    f"R4b platformDispatched 的爬被站点点亮: {name} 在 "
+                    f"{', '.join(lit_at)} 上 `legalSources.sources` 是 suspend=false → "
+                    f"平台派发器与 chart 会同时跑同一个爬（两个执行者、两份 crawl_runs"
+                    f"行）；把它从那份 overlay 里关掉，或从 platformDispatched 里摘出来"
+                    f"（装载器仍归 chart，不算冲突）")
+    return problems
     return problems
 
 
@@ -275,10 +318,27 @@ def self_test() -> int:
 flkLawCrawl:
   suspend: false
 """
-    # R4 的独立基线：全灭 + activeElsewhere 只列 b-lib。
+    # R4/R4b 的独立基线：全灭 + activeElsewhere 只列 b-lib（b 由别站点跑）。
     r4_base = """legalSources:
   activeElsewhere:
     - b-lib
+  sources:
+    a-lib:
+      name: a-crawl
+      suspend: true
+    b-lib:
+      name: b-crawl
+      suspend: true
+  loaders:
+    a-load:
+      suspend: true
+flkLawCrawl:
+  suspend: true
+"""
+    # R4b 的基线：全灭 + platformDispatched 只列 a-lib（a 由平台派发）。
+    r4b_base = """legalSources:
+  platformDispatched:
+    - a-lib
   sources:
     a-lib:
       name: a-crawl
@@ -344,6 +404,29 @@ flkLawCrawl:
              "values-s1.yaml": "legalSources:\n  sources:\n    a-lib:\n      suspend: false\n"},
             "R4",
         ),
+        (
+            # R4b 绿：平台派发的源在所有站点都关着（chart 只当手工兜底）。
+            "R4b 绿：platformDispatched 的源在所有站点都 suspend",
+            {"values.yaml": r4b_base,
+             "values-s1.yaml": "legalSources:\n  sources:\n    b-lib:\n      suspend: false\n"},
+            None,
+        ),
+        (
+            # R4b 红：某个站点点亮了它 ⇒ chart 与平台派发器同时跑同一个源。
+            "R4b 红：platformDispatched 被站点点亮（双执行者）",
+            {"values.yaml": r4b_base,
+             "values-s1.yaml": "legalSources:\n  sources:\n    a-lib:\n      suspend: false\n"},
+            "R4b platformDispatched 的爬被站点点亮",
+        ),
+        (
+            # R4b 红：同一名字两处都声明 ⇒ 「谁在跑」有两个答案。
+            "R4b 红：同时进了 activeElsewhere 与 platformDispatched",
+            {"values.yaml": r4b_base.replace(
+                "  platformDispatched:\n    - a-lib\n",
+                "  platformDispatched:\n    - a-lib\n  activeElsewhere:\n    - a-lib\n"),
+             "values-s1.yaml": "legalSources:\n  sources:\n    a-lib:\n      suspend: false\n"},
+            "R4b 同一条例同时出现在",
+        ),
     ]
     failures = 0
     for name, files, expect in cases:
@@ -374,12 +457,17 @@ flkLawCrawl:
             failures += 1
         except Unparseable:
             print("✓ 判不出：缺 values.yaml → EXIT 2")
-    # 判不出：activeElsewhere 写成 flow 序列（本脚本不解析 ⇒ 不许静默当成「没有例外」）
+    # 判不出：activeElsewhere / platformDispatched 写成 flow 序列或声明为空
+    # （本脚本不解析 ⇒ 不许静默当成「没有例外」）
     for name, text in (
         ("activeElsewhere 写成 flow 序列",
          r4_base.replace("  activeElsewhere:\n    - b-lib\n", "  activeElsewhere: [b-lib]\n")),
         ("activeElsewhere 声明了但为空",
          r4_base.replace("  activeElsewhere:\n    - b-lib\n", "  activeElsewhere:\n")),
+        ("platformDispatched 写成 flow 序列",
+         r4b_base.replace("  platformDispatched:\n    - a-lib\n", "  platformDispatched: [a-lib]\n")),
+        ("platformDispatched 声明了但为空",
+         r4b_base.replace("  platformDispatched:\n    - a-lib\n", "  platformDispatched:\n")),
     ):
         with tempfile.TemporaryDirectory() as td:
             (Path(td) / "values.yaml").write_text(text, encoding="utf-8")

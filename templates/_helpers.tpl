@@ -234,8 +234,13 @@ Context: dict "Values" $ "text" <toYaml 后的文本>
 {{- $paused := list -}}
 {{- /* activeElsewhere：本站点挂起、但**别的站点**在跑的源。它们不算 paused ——
       「这里不跑」不等于「没人跑」。报告侧 paused 还要 stale 才成立，所以这条只在
-      该源真的谁都不跑时才改变判定，而那正是切换后要立刻看见的失败形态。 */ -}}
-{{- $elsewhere := (.activeElsewhere | default list) -}}
+      该源真的谁都不跑时才改变判定，而那正是切换后要立刻看见的失败形态。
+
+      platformDispatched：由**平台派发器**执行的源（chart 的 CronJob 只是手工兜底，
+      因此全站点 suspend）。同一个道理——「chart 关着」不等于「没人跑」，所以同样
+      不能进暂停名单。2026-11-14 实历：rmfyalk 从 11-05 起零产出，日报却在出片后
+      转绿，因为它的 chart CronJob 一挂就被当成「合法暂停」。 */ -}}
+{{- $elsewhere := concat (.activeElsewhere | default list) (.platformDispatched | default list) -}}
 {{- range $key, $src := (.sources | default dict) -}}
 {{- /* 只认真正对应一个源的五条（sourceLabel: true）。flk-law-backfill 也挂在
        sources 下，但它是回填作业、没有源标签，名字也不在报告的适配器表里

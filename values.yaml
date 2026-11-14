@@ -232,6 +232,23 @@ legalSources:
   # （`make verify-sites` 的 R4 会拒「列了但其实没人跑」的僵尸例外）。
   activeElsewhere:
     - party-regulation-library
+  # 由**平台派发器**执行的源（chart 里那个 CronJob 只是手工兜底，所以它在本站点
+  # 也是 `suspend: true`）。与 `activeElsewhere` 只差「谁在跑」：那边是另一个站点的
+  # chart，这边是 `crawl_sources` 里 `enabled=true` + `schedule` 非空的平台派发
+  # （现在只有 rmfyalk-case-crawl：`10 3 * * *` / `Asia/Shanghai`）。
+  #
+  # 为什么必须与 activeElsewhere 同等对待：chart 的 suspend 被当作「未点亮」的代理，
+  # 于是这一族进了报告的暂停名单 ⇒ `paused = pausedSet.has(source) && stale` 一旦成立，
+  # 断流会被报成「合法暂停」。2026-11-14 实历：rmfyalk 从 11-05 起零产出，日报在
+  # 11-13T20:12 出片后由红转绿，**红变绿的同一刻没有任何数据进库**——不是恢复，是被
+  # 这条例外盖住了。
+  #
+  # 它与 activeElsewhere 的区别只在**校验方向**（`make verify-sites` 的 R4b）：
+  #   · activeElsewhere：名字必须被某个站点 overlay 点亮（否则是僵尸例外）
+  #   · platformDispatched：名字必须在**每一份** overlay 里都 `suspend: true`
+  #     （否则 chart 与平台会同时派发同一个源 = 两个执行者）
+  platformDispatched:
+    - rmfyalk-case-library
   sources:
     rmfyalk-case-library:
       name: rmfyalk-case-crawl
