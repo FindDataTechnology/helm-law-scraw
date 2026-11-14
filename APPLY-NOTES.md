@@ -416,8 +416,31 @@ Job 回填 `crawl_runs`，`FED_NAMESPACE=scraw`，两边看的是不同 Job 集�
 - 仍存的**惰性**差异：chart 多一个 `FD_RUNNER_IMAGE_TAG`（被镜像自报的
   `/app/IMAGE_TAG` 压过，无行为影响）；`legal-sources-report` 上 chart 多
   `FD_SCHEMA_MANAGED`（线上没它也已稳定跑出 `rows=47309`，加不加都只是「跳过 DDL」）、
-  线上多带外加的 `FD_RUN_STARTED`（apply 不会删）。这三处都**不动线上**——
-  为对齐而改一个正在正常出数的作业，风险大于收益。
+  线上多带外加的 `FD_RUN_STARTED`（apply 不会删）。
+
+**当日稍晚推翻了上面最后一句**（「这三处都不动线上」）。把它逐字段量化之后，
+`render-base` 与 master 线上有 **30 处**字段差异，其中四处**不是惰性的**：
+
+| 差异 | 面 | 为什么不算惰性 |
+|---|---|---|
+| 12 个对象 `resources: {}` | 全部 crawl/load/report | 线上**没有任何 limits**：一个跑飞的爬虫能把整台 3.7GB 机器吃掉，`NODE_OPTIONS` 只约束 V8 堆，管不住 RSS/CPU |
+| `FD_RUNNER_IMAGE_TAG=sha-492925f` | `flk-law-embed`、`flk-law-load` | 停在旧片的自报值；镜像自报虽会压过它，但一旦自报缺失就会把错片写进 `crawl_runs` |
+| `backoffLimit` 缺省（6） | `legal-sources-report` | chart 写 0 并配 `restartPolicy: Never`，理由写在模板里：重试三条一簇、间隔 12–102 秒，会把真信号稀释 |
+| report `args` 缺 `load_stalled` recorder | `legal-sources-report` | **这是真缺口**：`make verify-report` 只验渲染，于是它一直在绿的断言「报告把 load_stalled 写进 crawl_runs」**线上根本没有** |
+
+所以按 `make render-base | kubectl --context xinru apply -n scraw -f -` 收敛了 master，
+并把「只比镜像/suspend」升级成**逐字段比**（`image`/`env`/`resources`/`args`/`command`/
+`suspend`/`schedule`/`backoffLimit`）。两条判据纪律：
+
+- **比 `resources` 要把量做归一化**：render 出的是 `cpu: 1`（整数），API 读回是
+  `'1'`（字符串），直接比会造出 13 条假红；归一成字符串后残差 0。
+- **apply 前后核 `suspend` 没变**（本次 16 个对象全保持：party / rmfyalk-case-crawl /
+  flk-law-backfill 真，其余 13 个假）——整份 apply 最容易伤到的就是这一列。
+
+收敛结果：report 现在 `backoffLimit: 0`、args 含 `load_stalled_sources` recorder、
+`FD_RUNNER_IMAGE_TAG=sha-c33bf67`（`flk-law-embed`/`flk-law-load` 也一并追平），
+归一化后**字段残差 0 处**。窗口选在下一个作业（18:30Z）之前，CronJob 的 patch
+不碰已在跑的 Job。
 
 ### 2026-11-14 server1 侧整机收敛（备站从「三代前」追到当前片）
 
