@@ -232,16 +232,20 @@ Context: dict "Values" $ "text" <toYaml 后的文本>
 */}}
 {{- define "helm-law-scraw.legalPausedSources" -}}
 {{- $paused := list -}}
+{{- /* activeElsewhere：本站点挂起、但**别的站点**在跑的源。它们不算 paused ——
+      「这里不跑」不等于「没人跑」。报告侧 paused 还要 stale 才成立，所以这条只在
+      该源真的谁都不跑时才改变判定，而那正是切换后要立刻看见的失败形态。 */ -}}
+{{- $elsewhere := (.activeElsewhere | default list) -}}
 {{- range $key, $src := (.sources | default dict) -}}
 {{- /* 只认真正对应一个源的五条（sourceLabel: true）。flk-law-backfill 也挂在
        sources 下，但它是回填作业、没有源标签，名字也不在报告的适配器表里
        （源名 = rmfyalk-case-library / mfa-treaty-library / gov-rules-library /
        party-regulation-library / ccdi-supervisory-regulations）——把它写进暂停
        清单只会让报告打一行「未知源名」，徒增噪声。 */ -}}
-{{- if and $src.suspend $src.sourceLabel -}}{{- $paused = append $paused $key -}}{{- end -}}
+{{- if and $src.suspend $src.sourceLabel (not (has $key $elsewhere)) -}}{{- $paused = append $paused $key -}}{{- end -}}
 {{- end -}}
 {{- range $key, $ld := (.loaders | default dict) -}}
-{{- if $ld.suspend -}}{{- $paused = append $paused $ld.source -}}{{- end -}}
+{{- if and $ld.suspend (not (has $ld.source $elsewhere)) -}}{{- $paused = append $paused $ld.source -}}{{- end -}}
 {{- end -}}
 {{- $paused | uniq | join "," -}}
 {{- end -}}

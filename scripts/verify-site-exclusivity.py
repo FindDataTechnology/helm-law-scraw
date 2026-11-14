@@ -71,6 +71,8 @@ def parse(path: Path) -> dict[tuple[str, ...], str]:
     出现别的形态就抛 Unparseable —— 判不出比猜错便宜。
     """
     scalars: dict[tuple[str, ...], str] = {}
+    items: dict[tuple[str, ...], list[str]] = {}
+    maps: set[tuple[str, ...]] = set()
     stack: list[tuple[int, str]] = []
     skip_indent: int | None = None
     skipped_lists: list[str] = []
@@ -84,7 +86,7 @@ def parse(path: Path) -> dict[tuple[str, ...], str]:
                 continue
             skip_indent = None
         if line.startswith("-"):
-            # list 不解析，整段跳过。合法形态：`command:`/`args:`/`accessModes:`
+            # list 不参与 map 比对。合法形态：`command:`/`args:`/`accessModes:`
             # 这类与「谁跑」无关的字段。但 `sources:`/`loaders:` 本身若变成
             # list（`- name: x`），键集比对就整体失效 ⇒ 那时判不出，不许静默跳过。
             here = tuple(k for _, k in stack)
@@ -92,7 +94,13 @@ def parse(path: Path) -> dict[tuple[str, ...], str]:
                 raise Unparseable(
                     f"{path.name}:{lineno} {'.'.join(here) or '<root>'} 是 list；"
                     f"本闸按 map 比较，形态一变就判不出")
-            skipped_lists.append(f"{path.name}:{lineno} {'.'.join(here)}")
+            item = line[1:].strip()
+            # 记录**纯标量**列表项（`- party-regulation-library`）：R4 要读
+            # `activeElsewhere`，只跳过不记录会让那条判据零覆盖却报绿。
+            if item and ":" not in item and not item.startswith(("{", "[", "&", "*")):
+                items.setdefault(here, []).append(item.strip("\"'"))
+            else:
+                skipped_lists.append(f"{path.name}:{lineno} {'.'.join(here)}")
             skip_indent = stack[-1][0] if stack else -1
             continue
         if ":" not in line:
@@ -106,6 +114,7 @@ def parse(path: Path) -> dict[tuple[str, ...], str]:
         here = tuple(k for _, k in stack) + (key,)
         if rest == "" or rest.startswith("#"):
             stack.append((indent, key))
+            maps.add(here)
             continue
         value = rest.split(" #", 1)[0].strip()
         if value.startswith("{"):
@@ -117,6 +126,8 @@ def parse(path: Path) -> dict[tuple[str, ...], str]:
             continue
         scalars[here] = value.strip("\"'")
     parse.skipped_lists = skipped_lists  # type: ignore[attr-defined]
+    parse.items = items                  # type: ignore[attr-defined]
+    parse.maps = maps                    # type: ignore[attr-defined]
     return scalars
 
 
@@ -150,6 +161,11 @@ def check(dirpath: Path, base_site: str) -> list[str]:
     if not base_path.is_file() or not overlay_paths:
         raise Unparseable(f"{dirpath} 缺 {BASE} 或 values-*.yaml")
     base = parse(base_path)
+    # parse() 的 items/maps/skipped_lists 是**模块级副作用**（下一次 parse 会覆盖），
+    # 所以必须在这里立刻快照 base 的；等循环里 parse 过 overlay 再读就变成读 overlay 的。
+    base_items = dict(getattr(parse, "items", {}))
+    base_maps = set(getattr(parse, "maps", set()))
+    base_skipped = list(getattr(parse, "skipped_lists", []))
     problems: list[str] = []
 
     # 凭据 overlay 若写了 suspend，那条声明没有消费者看得见（它不是站点），
@@ -197,6 +213,47 @@ def check(dirpath: Path, base_site: str) -> list[str]:
                 f"切换宿主必须**同一次改动**里两边一起翻（新站点 false + 旧站点 true），"
                 f"只翻一侧就是两个执行者写同一张 crawl_runs"
             )
+
+    # R4 僵尸例外：`legalSources.activeElsewhere` 里的源名必须真的在某份站点
+    # overlay 里 suspend=false。它是报告侧的「别把它算 paused」白名单 —— 列了却
+    # 没人跑，则该源一旦断流，报告会说「合法暂停」而不是「断流」，把切换之后最该
+    # 看见的失败形态长期遮住。所以这一条**计命中**（与「只报事实」相反）。
+    #
+    # 读的是 parse.items（列表项），不是 scalars：`activeElsewhere` 是 YAML 列表，
+    # 只按 map 读会得到空集 —— 那是零覆盖，必须判不出，不许报绿。
+    # 快照在 `base = parse(...)` 之后已取（见函数开头），这里只用局部变量。
+    else_where = ("legalSources", "activeElsewhere")
+
+    # 源名（报告的适配器名）→ 哪些站点让它真的跑起来了。
+    lit_sources: set[str] = set()
+    for scalars in sites.values():
+        for label in enabled_labels(scalars):
+            parts = label.split(".")
+            if len(parts) != 3 or parts[0] != "legalSources":
+                continue
+            if parts[1] == "sources":
+                lit_sources.add(parts[2])      # 源名就是 map 的键
+            elif parts[1] == "loaders":
+                src = scalars.get(("legalSources", "loaders", parts[2], "source"))
+                if src:
+                    lit_sources.add(src)
+
+    if any("legalSources.activeElsewhere" in s for s in base_skipped):
+        raise Unparseable(
+            f"{BASE}: legalSources.activeElsewhere 写成了本脚本不解析的形态"
+            f"（flow 序列 `[...]`）→ 判不出。改成逐行 `- 源名` 的 block 序列")
+    if else_where in base_maps:
+        names = base_items.get(else_where, [])
+        if not names:
+            raise Unparseable(
+                f"{BASE}: legalSources.activeElsewhere 声明了却读不出任何条目 → "
+                f"判不出（空清单与「读不到」表现相同，不许当成「没有例外」）")
+        for name in sorted(set(names)):
+            if name not in lit_sources:
+                problems.append(
+                    f"R4 僵尸例外 legalSources.activeElsewhere: 列了 {name}，但没有任何"
+                    f"站点 overlay 让它 suspend=false → 它现在谁都不跑，留在白名单里"
+                    f"会让报告把它判成「合法暂停」而不是「断流」；删掉这一条")
     return problems
 
 
@@ -217,6 +274,23 @@ def self_test() -> int:
       suspend: false
 flkLawCrawl:
   suspend: false
+"""
+    # R4 的独立基线：全灭 + activeElsewhere 只列 b-lib。
+    r4_base = """legalSources:
+  activeElsewhere:
+    - b-lib
+  sources:
+    a-lib:
+      name: a-crawl
+      suspend: true
+    b-lib:
+      name: b-crawl
+      suspend: true
+  loaders:
+    a-load:
+      suspend: true
+flkLawCrawl:
+  suspend: true
 """
     cases = [
         (
@@ -254,6 +328,22 @@ flkLawCrawl:
              "values-s2.yaml": "legalSources:\n  sources:\n    a-lib:\n      suspend: false\n"},
             None,
         ),
+        (
+            # R4 用的独立基线：base 全灭，`activeElsewhere` 只列 b-lib。
+            # 不复用上面的 base —— 那份把 a-load/flkLawCrawl 点亮着，任何单站点
+            # overlay 都会继承出 R1，用例就证不到 R4。
+            "绿：activeElsewhere 的源确实在别的站点点亮",
+            {"values.yaml": r4_base,
+             "values-s1.yaml": "legalSources:\n  sources:\n    b-lib:\n      suspend: false\n"},
+            None,
+        ),
+        (
+            # R4 红：白名单留着，但没人点亮它 ⇒ 报告会把它判成「合法暂停」。
+            "R4 红：activeElsewhere 里是僵尸例外（谁都不跑）",
+            {"values.yaml": r4_base,
+             "values-s1.yaml": "legalSources:\n  sources:\n    a-lib:\n      suspend: false\n"},
+            "R4",
+        ),
     ]
     failures = 0
     for name, files, expect in cases:
@@ -284,6 +374,23 @@ flkLawCrawl:
             failures += 1
         except Unparseable:
             print("✓ 判不出：缺 values.yaml → EXIT 2")
+    # 判不出：activeElsewhere 写成 flow 序列（本脚本不解析 ⇒ 不许静默当成「没有例外」）
+    for name, text in (
+        ("activeElsewhere 写成 flow 序列",
+         r4_base.replace("  activeElsewhere:\n    - b-lib\n", "  activeElsewhere: [b-lib]\n")),
+        ("activeElsewhere 声明了但为空",
+         r4_base.replace("  activeElsewhere:\n    - b-lib\n", "  activeElsewhere:\n")),
+    ):
+        with tempfile.TemporaryDirectory() as td:
+            (Path(td) / "values.yaml").write_text(text, encoding="utf-8")
+            (Path(td) / "values-s1.yaml").write_text(
+                "legalSources:\n  sources:\n    b-lib:\n      suspend: false\n", encoding="utf-8")
+            try:
+                check(Path(td), "master")
+                print(f"✗ 判不出：{name} 却退 0")
+                failures += 1
+            except Unparseable:
+                print(f"✓ 判不出：{name} → EXIT 2")
     print("SELF-TEST", "PASS" if not failures else f"FAIL({failures})")
     return 0 if not failures else 1
 

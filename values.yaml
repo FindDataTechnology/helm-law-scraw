@@ -223,6 +223,15 @@ legalSources:
     secretName: flk-law-pg-credentials
     userKey: pg-user
     passwordKey: pg-password
+  # 在**别的站点**点亮、因此本站点 `suspend: true` 的源（值写报告的适配器源名，
+  # 不是 CronJob 名）。报告侧 `paused = pausedSet.has(source) && stale`：有新鲜证据
+  # 就按正常判鲜，所以这条只在**它真的谁都不跑**时才起作用——而那正是要红的时候。
+  # 少了这条例外，某源搬到别站点后一旦停摆，报告会把它报成「合法暂停」而不是
+  # 「断流」，等于把切换试点最该看见的失败形态遮掉。
+  # 约束：这里每一个名字都必须在**某一份站点 overlay 里**是 `suspend: false`
+  # （`make verify-sites` 的 R4 会拒「列了但其实没人跑」的僵尸例外）。
+  activeElsewhere:
+    - party-regulation-library
   sources:
     rmfyalk-case-library:
       name: rmfyalk-case-crawl

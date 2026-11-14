@@ -213,6 +213,31 @@ kubectl --context xinru -n scraw patch cronjob mfa-treaty-crawl --type=merge -p 
 `verify-sites` 拦的是**提交**层面的两侧同亮；运行层面的这段窗口靠人守，事后用下面的
 `make verify-runs` 核（它读数据，不读清单）。
 
+### 搬走一个源之后，还要把它从「合法暂停」名单里摘出来（2026-11-14）
+
+日报的 `LEGAL_PAUSED_SOURCES` 由模板按**本站点**的 `suspend` 推导
+（`helm-law-scraw.legalPausedSources`）。于是源一旦搬到别站点、本站点写成
+`suspend: true`，日报就会把它列进暂停名单；而报告侧是
+`paused = pausedSet.has(source) && stale`（`fd-law-data` `lib/legal-sources/report.js`：
+「证据优先：清单说暂停、但绿线内确有成功运行证据时，按正常判鲜」）。
+两者叠起来的后果只有一个：**那个源真的谁也不跑之后，日报说它「合法暂停」而不是
+「断流」**——而这恰恰是切换试点最该看见的失败形态。
+
+所以切换要连这一处一起改：把源名加进 `legalSources.activeElsewhere`（`values.yaml`，
+写的是**报告的适配器源名**，不是 CronJob 名）：
+
+```yaml
+legalSources:
+  activeElsewhere:
+    - party-regulation-library
+```
+
+于是 base 渲染出来的暂停名单回到 `rmfyalk-case-library`（与线上现值逐字相同），
+而报告仍会正常判它的鲜。`make verify-sites` 的 R4 守这条白名单：**列了却没有任何
+站点 overlay 让它 `suspend: false`** 即命中——僵尸例外的作用方向是「让红灯不亮」，
+所以它计命中，而不是只报事实。两种读不出也退 2：写成 flow 序列 `[a, b]`、
+或声明了却没有任何条目（零覆盖不许读成「没有例外」）。
+
 ## 单执行者：数据里只许一条 success（`make verify-runs ROWS=…`）
 
 `verify-sites` 判**声明**（两份 values 谁写了 `suspend: false`），`verify-runs` 判
