@@ -51,7 +51,7 @@ images:
     # sha-7d89e71` + anchors.conf entry. Never pin a tag that is not anchored.
     registry: ccr.ccs.tencentyun.com
     repository: lawcraw-business/fd-law-data
-    tag: sha-492925f
+    tag: sha-c33bf67
     pullPolicy: IfNotPresent
   flkLawCrawl:
     # IN-SERVICE (suspend=false) daily flk incremental crawl.
@@ -62,14 +62,14 @@ images:
     # shares one anchored, pull-able image. No pull secret: nodes hold ccr creds.
     registry: ccr.ccs.tencentyun.com
     repository: lawcraw-business/fd-law-data
-    tag: sha-492925f
+    tag: sha-c33bf67
     pullPolicy: IfNotPresent
   authBroker:
     # lease-api Deployment. 2026-10-14: migrated off retired Harbor to ccr
     # (identical tag sha-b726e1f existed there all along).
     registry: ccr.ccs.tencentyun.com
     repository: lawcraw-business/legal-auth-broker
-    tag: sha-492925f
+    tag: sha-c33bf67
     pullPolicy: IfNotPresent
   # --- legacy components, disabled on xinru (nothing live) ---
   scrapyd:
@@ -251,7 +251,7 @@ legalSources:
         # fix; crawl code identical between the two — see 7d89e71..b63d0d1).
         registry: ccr.ccs.tencentyun.com
         repository: lawcraw-business/fd-law-data
-        tag: sha-492925f
+        tag: sha-c33bf67
       command:
         - node
         - bin/rmfyalk-crawl.mjs
