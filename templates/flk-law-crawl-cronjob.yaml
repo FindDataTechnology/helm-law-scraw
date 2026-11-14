@@ -62,4 +62,13 @@ spec:
                   value: {{ .Values.flkLawCrawl.pageSize | quote }}
                 - name: FLK_LOOKBACK_DAYS
                   value: {{ .Values.flkLawCrawl.lookbackDays | quote }}
+                {{- /*
+                遥测 env 曾经不在这个模板里：线上那三个 flk 作业的 FD_CRAWL_DB_URL /
+                FD_SCHEMA_MANAGED 是手工 patch 上去的（kubectl 的 last-applied 注解里
+                只有本文的 8 个 env），于是 2026-10-06 起 flk-law-crawl 的每轮都是
+                「[telemetry] FD_CRAWL_DB_URL not set … (no-op)」——爬取照跑、crawl_runs
+                一条不写，直到 11-14 才从 pod 日志首行看出来。模板不带它，任何人跑一次
+                apply/replace 就会把手改抹回去，故按其它法务作业的同一份 helper 供给。
+                */}}
+                {{- include "helm-law-scraw.legalTelemetryEnv" (dict "telemetry" .Values.legalSources.telemetry "imageTag" .Values.images.flkLawCrawl.tag) | nindent 16 }}
               command: ["node", "bin/flk-crawl.mjs"]
