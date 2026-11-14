@@ -42,10 +42,16 @@ Rendered object set (15 objects) == chart-owned live inventory:
 | Deployment + Service | legal-auth-broker |
 
 **Not charted on purpose** (live, external, must never be touched by an apply):
-`flk-law-load`, `flk-law-embed`, `federation-observer`, `guide-cases-crawl`,
-`gost-egress`, `proxy-control`, and the rmfyalk identity-profile PVC
-(`legal-auth-rmfyalk-<账号标识>-profile`；账号标识见带外 `values-private.yaml`).
-The chart renders no object with any of these names — verified.
+`federation-observer`, `guide-cases-crawl`, `gost-egress`, `proxy-control`, and the
+rmfyalk identity-profile PVC (`legal-auth-rmfyalk-<账号标识>-profile`；账号标识见带外
+`values-private.yaml`). The chart renders no object with any of these names —
+re-verified 2026-11-14 against `make render` (17 objects).
+
+**订正（2026-11-14）**：这份清单原先还写着 `flk-law-load` 与 `flk-law-embed`
+「not charted / must never be touched by an apply」——**错的**。两者都有各自的模板与
+values 段（`flkLaw`-侧与 `flkLawEmbed`），`make render` 明确渲染它们（各带
+`suspend`）。按旧清单办事的人会以为「这两个对象不归 chart 管」，于是手工改线上、
+或以为改 values 没用。判据：以 `make render` 的对象名为准，别信这段文字。
 
 **Disabled by default** (nothing live on xinru, verified cluster-wide
 2026-10-06): `scrapyd.enabled`, `lawContracts.enabled`, `wenshuCrawl.enabled`,
@@ -132,7 +138,7 @@ delete cronjob party-regulation-crawl`），别去 grep 宽匹配。
 
 | secret / key | master | server1 | 影响 |
 |---|---|---|---|
-| `flk-law-pg-credentials` / `pg-password` | `3515c8f6`(28B) | `d40c7c11`(28B) | **load 与 report 搬过去必然「Password 认证失败」**；server1 侧 30 天内 10 轮失败全是这句 |
+| `flk-law-pg-credentials` / `pg-password` | `3515c8f6`(28B) | ~~`d40c7c11`~~ → **已对齐 `3515c8f6`**（2026-11-14） | 原为 load/report 的硬阻塞；对齐后 server1 上 `create job --from=cronjob/rmfyalk-case-load` 实测 **Complete 1/1、62s**、日志回 `laws: 32355 / law_chunks: 362476 / unchanged: true` |
 | `flk-embed-credentials` / `embed-api-key` | 有 | **没有** | **flk-law-embed 在 server1 起不来** |
 | `legal-identity-rmfyalk-acct001` / `crawl_proxy_url`、`login_proxy_url` | 同值(54B) | 同值(49B，二者相等但≠master) | rmfyalk 会走另一个代理；是设计还是漂移待确认 |
 | `federation-db`/`url`、`flk-law-crawl-credentials` 两个 dashed 键、`legal-auth-broker` 三键 | — | **同值** | crawl 可以搬（party 试点已实测通过） |
@@ -140,6 +146,13 @@ delete cronjob party-regulation-crawl`），别去 grep 宽匹配。
 所以**逐源翻的顺序被这份矩阵决定**，不是按「源有多轻」：
 crawl 类今天就能搬；load / report 要先对齐 `pg-password`；`flk-law-embed` 要先补
 secret。`verify-secrets` 红了就别翻，它列的四条正是四处会在真跑时才炸的差异。
+
+**2026-11-14 处置**：`pg-password` 已按「先快照 server1 原值 → 用 master 的 data 整份
+覆盖（secret 的 patch 会整体替换 data，不能只补一个键）→ 逐键哈希复核 → 真跑一轮 load
+验证」四步对齐，server1 侧的 load 从「连着 10 轮 Password 认证失败」变成
+`Complete 1/1`。剩下两条仍是阻塞，且都不该由我单方面决定：
+`flk-embed-credentials`（要不要让 embed 也搬过去）、`legal-identity-rmfyalk-acct001`
+的两个 proxy_url（换站点就换代理出口，是设计还是漂移要仓主定）。
 
 **为什么只比 chart 引用的那些键**：两份 secret 的键集本就会因为 `envFrom` 与显式
 `secretKeyRef` 两种写法分叉（实测 server1 的 `flk-law-crawl-credentials` 是超集，
