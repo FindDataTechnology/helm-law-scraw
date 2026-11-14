@@ -78,7 +78,47 @@ mfa-treaty / gov-rules / party-regulation / ccdi 各写了两行、`image_tag` �
 2. **切换宿主 = 同一次改动里两边一起翻**（新站点 `false` + 旧站点 `true`）。
    闸不猜哪边该活（那是人的裁决），只拒绝「两边都活」。
 
-现状（2026-11-14）：**master 是活宿主，server1 / chengsi 全灭**。
+## 宿主切换：已裁定，未执行（2026-11-14 查明）
+
+**裁定（2026-10-07，用户五机分布）**：法律线宿主 = **xinru-server1**，全家（CronJob +
+dispatcher + observer + auth-broker）驻扎于此。记录在
+`openspec/changes/archive/2026-10-12-legal-line-federation/`：proposal「法律线宿主=
+xinru-server1」、tasks 3.3「站点 dispatcher 部署于 xinru-server1」已勾。
+
+**实际（2026-11-14 实测）**：**xinru-master 仍在跑整条线**（16 个 CronJob、13 个
+`suspend=false`、镜像 `sha-c33bf67`），server1 侧 17 个法律 CronJob **全部 suspend**
+（镜像停在 `sha-b63d0d1`）。也就是说：**归档时没有人把 master 侧的 CronJob 关掉**，
+那份 change 的任务表里也没有这一条——迁移名义上完成，负载原地未动。
+
+所以现在的状态不是「该选哪边」，而是「裁定的目的地还没到，中转站还在供数」。
+`make verify-sites` 保证的只是「此刻只有一个执行者」，它不替人做切换。
+
+### 切换配方（一次改动，两边同时翻）
+
+```bash
+# 1) git 侧（同一个 commit 里两件事，缺一不可）
+#    values-server1.yaml: 目标清单改成 suspend: false
+#    values.yaml:         对应条目改成 suspend: true（master 关灯）
+make verify-sites          # 必须绿：两个站点不能同时点亮
+git commit && git push
+
+# 2) 目标站点先应用（server1），核一次真跑
+helm template law-craw . -n scraw -f values-server1.yaml -f values-private.yaml \
+  | sudo k3s kubectl apply -n scraw -f -         # 在 server1 上执行
+kubectl --context xinru-server1 -n scraw create job --from=cronjob/mfa-treaty-crawl \
+  mfa-treaty-crawl-cutover && kubectl --context xinru-server1 -n scraw logs -f job/mfa-treaty-crawl-cutover
+#   验收：镜像 tag 与 make render 一致、crawl_runs 新行 image_tag 正确、laws 有新对象
+
+# 3) 再关旧站点（master），核它真的不再写
+kubectl --context xinru -n scraw patch cronjob mfa-treaty-crawl --type=merge -p '{"spec":{"suspend":true}}'
+#   验收：次日该源只有 server1 那一行（crawl_runs 里 source+minute 唯一）
+
+# 回滚：把 1) 的两处翻回去并重推；两个站点都回到「只有 master 亮」
+```
+
+**第 2 步与第 3 步之间必然有一段两侧都亮**（目标已起、旧宿主未关）。那一段的代价是
+同一源两行——所以顺序不能反：先起目标、核通，再关旧宿主，且要在同一小时内完成。
+`verify-sites` 拦的是**提交**层面的两侧同亮；运行层面的这段窗口靠人守。
 
 ## Images
 

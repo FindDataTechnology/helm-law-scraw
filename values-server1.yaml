@@ -14,7 +14,10 @@
 # 或反之。只翻一侧就是两个执行者写同一张 crawl_runs、同一批 laws 行。
 # `scripts/verify-site-exclusivity.py`（make verify-sites）拒绝「两边都活」。
 #
-# 现状（2026-11-14）：master 是活宿主，server1 全灭；切换点未到。
+# 现状（2026-11-14）：**裁定目的地是 server1**（2026-10-07 用户五机分布，见
+# openspec archive 2026-10-12-legal-line-federation），但负载仍在 xinru-master 跑
+# ——归档时没人关掉 master 侧。所以本文件此刻全 true（中转站供数中），切换配方见
+# APPLY-NOTES「宿主切换：已裁定，未执行」。
 # auth-broker 随线部署（Deployment，不是 cron，故不在这里声明）。
 legalSources:
   sources:
