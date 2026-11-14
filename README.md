@@ -367,8 +367,11 @@ echo "备份目录: ~/law-rollback/$D"
 2. 出片后按顺序换 tag：先 `legalSources.tag`（报告/爬取/装载同一 tag），再 `authBroker.tag`。
    当前分别是 `sha-b63d0d1` 与 `sha-b726e1f`。
 3. 应用：`helm template law-craw . --namespace scraw -f values-server1.yaml -f values-private.yaml | kubectl apply -n scraw -f -`
-   （只 apply，别删对象；先跑 `make verify-report`。漏掉 `-f values-private.yaml` 会渲染报错，
-   不会静默应用空端点 —— 见「带外私有值」一节）。
+   （只 apply，别删对象；先跑 `make verify-report` 与 `make verify-sites`。漏掉 `-f values-private.yaml`
+   会渲染报错，不会静默应用空端点 —— 见「带外私有值」一节。
+   `verify-sites` 拒绝「同一个 CronJob 在两个站点同时点亮」：2026-11-14 两个集群各有一套
+   法律线 CronJob、同一轮各跑一遍，`crawl_runs` 里就是同一源两行、tag 不同。它只在两侧 pod
+   都起来的那一轮留痕，所以「最近一轮没有两行」证明不了没事。）
 4. 验证：
    ```bash
    kubectl -n scraw --context xinru rollout status deploy/legal-auth-broker
