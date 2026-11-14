@@ -93,6 +93,19 @@ xinru-server1」、tasks 3.3「站点 dispatcher 部署于 xinru-server1」已�
 所以现在的状态不是「该选哪边」，而是「裁定的目的地还没到，中转站还在供数」。
 `make verify-sites` 保证的只是「此刻只有一个执行者」，它不替人做切换。
 
+### 目标站点已预验（2026-11-14，三面实测）
+
+切换前先证明「目的地能跑这条线」，免得切换当天才发现拉不到镜像或连不上库：
+
+| 面 | 探针 | 结果 |
+|---|---|---|
+| 镜像 | `kubectl --context xinru-server1 -n scraw run pullprobe --rm -i --image=…:sha-c33bf67 -- node -e …` | 拉起并执行成功（server1 节点自带 ccr 认证，无需 pull secret） |
+| PG | 同镜像 Pod，`FD_CRAWL_DB_URL ← secret federation-db/url`，跑一次 `select current_database()` | `fd_open_data` 通，`crawl_runs` 可读（party-regulation 48 行） |
+| 对象存储 | `createS3({endpoint: 100.64.0.5:9000, …secret flk-law-crawl-credentials})` + `listObjects('laws', {prefix:'legal-sources/report/'})` | 通，列到 40 个报告对象 |
+
+三面都过，且探针已删（不留对象）。所以配方第 2 步的「能不能跑」已经有答案，
+真正剩下的未知只有**吞吐与资源**（server1 是较小的 VM，限额在 chart 里已有）。
+
 ### 切换配方（一次改动，两边同时翻）
 
 ```bash
