@@ -154,6 +154,28 @@ flkLawCrawl:
     endpoint: ""
     region: us-east-1
 
+# flk 增量 embed 作业（05:30，接在 04:30 的 flk-law-load 之后）。
+# **2026-11-14 才进 chart**：它自 2026-10-19 起就在线上跑，但真源只有
+# `fd-law-data/k8s/flk-embed-cronjob.yaml` 那份手工清单——chart 重建不出来，
+# 换命名空间/新集群时它会静默消失，而症状是「检索里没有新法条」，
+# 没有任何告警会响（同族：flk-law-load 10-06 被漏掉，40 天只爬不载）。
+flkLawEmbed:
+  schedule: "30 5 * * *"       # == live
+  suspend: false               # == live
+  concurrencyPolicy: Forbid
+  activeDeadlineSeconds: 10800 # == live（3h）
+  secretName: flk-law-crawl-credentials   # rustfs-access-key / rustfs-secret-key
+  embedSecretName: flk-embed-credentials  # embed-api-key（永不进 git）
+  lawsExportBucket: laws-export
+  embedModel: "Qwen/Qwen3-Embedding-0.6B"
+  qdrant:
+    # 内网端点，同 rustfs：真源在 values-private.yaml
+    url: ""
+  qdrantCollection: law_chunks_v2
+  rustfs:
+    endpoint: ""
+    region: us-east-1
+
 # --- wave-1 authoritative legal sources (fd-law-data) ---
 # Converged to the xinru live inventory (2026-10-06):
 #   sources  = 5 wave-1 crawl CronJobs + flk-law-backfill (names = bare keys,

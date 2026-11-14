@@ -1,0 +1,67 @@
+{{- /*
+flk 增量 embed 作业：读 laws-export 的 incr-manifest.json 分片 → SiliconFlow
+Qwen3-Embedding → Qdrant law_chunks_v2。**不碰 PostgreSQL**（凭据只有 S3 与
+embed API），但遥测仍写 crawl_runs，所以 FD_CRAWL_DB_URL / FD_SCHEMA_MANAGED
+要带（live 是手工加上的，参考清单里没有——这正是本次收进 chart 的原因之一）。
+
+进 chart 前它的唯一真源是 `fd-law-data/k8s/flk-embed-cronjob.yaml`（手工 apply）：
+chart 重建不出来 ⇒ 换命名空间/新集群时会静默消失，症状是「检索里没有新法条」，
+没有告警会响。
+
+env 顺序与 live 对齐（放在 helper 之前），渲染差只有 helper 带出的惰性
+FD_RUNNER_IMAGE_TAG（被镜像自报的 /app/IMAGE_TAG 压过）。
+*/ -}}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: flk-law-embed
+  labels:
+    app.kubernetes.io/name: flk-law-embed
+    app.kubernetes.io/part-of: finddata
+spec:
+  schedule: {{ .Values.flkLawEmbed.schedule | quote }}
+  suspend: {{ .Values.flkLawEmbed.suspend }}
+  concurrencyPolicy: {{ .Values.flkLawEmbed.concurrencyPolicy }}
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      activeDeadlineSeconds: {{ .Values.flkLawEmbed.activeDeadlineSeconds }}
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: flk-law-embed
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: embedder
+              image: "{{ include "helm-law-scraw.image" (dict "registry" .Values.images.flkLawCrawl.registry "repository" .Values.images.flkLawCrawl.repository "tag" .Values.images.flkLawCrawl.tag) }}"
+              imagePullPolicy: {{ .Values.images.flkLawCrawl.pullPolicy }}
+              env:
+                - name: RUSTFS_ENDPOINT
+                  value: {{ required "缺少 flkLawEmbed.rustfs.endpoint：内网端点写在带外 values-private.yaml（已 gitignore）" .Values.flkLawEmbed.rustfs.endpoint | quote }}
+                - name: RUSTFS_ACCESS_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ .Values.flkLawEmbed.secretName }}
+                      key: rustfs-access-key
+                - name: RUSTFS_SECRET_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ .Values.flkLawEmbed.secretName }}
+                      key: rustfs-secret-key
+                - name: LAWS_EXPORT_BUCKET
+                  value: {{ .Values.flkLawEmbed.lawsExportBucket | quote }}
+                - name: EMBED_API_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ .Values.flkLawEmbed.embedSecretName }}
+                      key: embed-api-key
+                - name: EMBED_MODEL
+                  value: {{ .Values.flkLawEmbed.embedModel | quote }}
+                - name: QDRANT_URL
+                  value: {{ required "缺少 flkLawEmbed.qdrant.url：内网端点写在带外 values-private.yaml（已 gitignore）" .Values.flkLawEmbed.qdrant.url | quote }}
+                - name: QDRANT_COLLECTION
+                  value: {{ .Values.flkLawEmbed.qdrantCollection | quote }}
+                {{- include "helm-law-scraw.legalTelemetryEnv" (dict "telemetry" .Values.legalSources.telemetry "imageTag" .Values.images.flkLawCrawl.tag) | nindent 16 }}
+              command: ["node", "bin/flk-embed.mjs"]
