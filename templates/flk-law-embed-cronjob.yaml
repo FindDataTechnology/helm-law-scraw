@@ -37,6 +37,10 @@ spec:
             - name: embedder
               image: "{{ include "helm-law-scraw.image" (dict "registry" .Values.images.flkLawCrawl.registry "repository" .Values.images.flkLawCrawl.repository "tag" .Values.images.flkLawCrawl.tag) }}"
               imagePullPolicy: {{ .Values.images.flkLawCrawl.pullPolicy }}
+              {{- with .Values.flkLawEmbed.resources }}
+              resources:
+{{ toYaml . | indent 16 }}
+              {{- end }}
               env:
                 - name: RUSTFS_ENDPOINT
                   value: {{ required "缺少 flkLawEmbed.rustfs.endpoint：内网端点写在带外 values-private.yaml（已 gitignore）" .Values.flkLawEmbed.rustfs.endpoint | quote }}

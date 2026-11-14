@@ -143,6 +143,23 @@ flkLawCrawl:
   suspend: false            # == live; NEVER flip without the wave manual
   concurrencyPolicy: Forbid
   activeDeadlineSeconds: 14400   # == live
+  # 与 legalSources 同一套理由（2026-11-14 补）：这台法律线宿主只有 3.64 GiB，
+  # 而 `templates/flk-law-crawl-cronjob.yaml` 此前**既没有 resources 也没有
+  # NODE_OPTIONS** —— 全站 12 个 legalSources 作业都加了限值，唯独最忙的这个爬虫
+  # 无上限，等于「跑飞的爬虫可以吃掉整台机器、内核随机杀一个」（同族于 09-24 那次
+  # OOM）。限值取与 legalSources 相同的档：requests 100m/256Mi（调度只看这个），
+  # limits cpu 1 / mem 2Gi。
+  #
+  # **刻意不加 NODE_OPTIONS**：legalSources 那条 384MB 是 09-24 实测「堆过 ~800MB
+  # 被内核杀」之后的经验值；flk 这条爬虫没有同类实测，照抄一个堆上限反而可能把
+  # 它自己压死（V8 堆耗尽比 cgroup OOM 更难查）。要加先量。
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 2Gi
   secretName: flk-law-crawl-credentials
   lawsBucket: laws
   rateMs: 1100
@@ -164,6 +181,15 @@ flkLawEmbed:
   suspend: false               # == live
   concurrencyPolicy: Forbid
   activeDeadlineSeconds: 10800 # == live（3h）
+  # 同 flkLawCrawl.resources：embed 走 qdrant 与嵌入接口，本身不重，但一个无上限的
+  # 容器在这台 3.64 GiB 机器上同样是尾部风险。限值同档，不加 NODE_OPTIONS（理由同上）。
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 2Gi
   secretName: flk-law-crawl-credentials   # rustfs-access-key / rustfs-secret-key
   embedSecretName: flk-embed-credentials  # embed-api-key（永不进 git）
   lawsExportBucket: laws-export

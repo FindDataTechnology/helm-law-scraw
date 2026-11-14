@@ -299,7 +299,7 @@ legalSources:
 （`lib/auth-broker/logins/rmfyalk.js`：headed Chromium + noVNC，等人在页面里
 完成登录，"human login not completed before the session deadline"）。
 #72 已在 13:33Z 用 panel 自己的 `_apply_timeouts` 收成 `timeout`，
-之后 `prearm_plan`（模拟 18:30Z）返回 `rmfyalk/acct001` ——
+之后 `prearm_plan`（模拟 18:30Z）返回了 `rmfyalk` 那条身份的账号别名 ——
 今晚 02:25 CST 前那轮预拉起会开出登录站，需要有人在 Console 里完成登录；
 登录成功后按 `authenticated-crawling` 规格，平台会立刻为该 profile 入队一次执行。
 
