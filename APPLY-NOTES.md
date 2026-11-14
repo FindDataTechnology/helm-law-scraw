@@ -163,7 +163,14 @@ secret。`verify-secrets` 红了就别翻，它列的四条正是四处会在真
 | 源 | 生效站点 | 依据 |
 |---|---|---|
 | `party-regulation-crawl` | **xinru-server1**（2026-11-14 试点） | master 侧 `suspend: true`、server1 侧 `false`；真爬已在 server1 实测（Job Complete 17s、`crawl_runs` 自报 `sha-c33bf67`、日志可见）。观察一个 03:40 轮次 |
-| 其余 6 crawl + 5 load + report + flkLawCrawl | xinru-master（原状） | 未翻 |
+| 其余 6 crawl + 5 load + embed + report + flkLawCrawl | **xinru-master**（唯一执行者） | 2026-11-14 实测两集群 `suspend` 全表：master 亮 13 个、server1 只亮 `party-regulation-crawl`（另有 `fd-industry-dispatcher` 与 `federation-observer` 两条站点级作业）|
+
+**2026-11-14 之前，其中 4 个爬虫 + 若干 loader 在两侧同时是活的**——这也是
+`crawl_runs` 里 11-10/11-11/11-13 三轮各出现同窗两行的原因（11-13 那轮
+`ccdi`/`gov-rules`/`mfa-treaty`/`party` 四只在**同一秒**两侧各写一行）。
+今天把 `values-server1.yaml` 应用到 server1 后，overlay 把 party 以外的条目一律
+`suspend: true`，**双跑就此结束**；master 侧对象一直是 `values.yaml` 的收敛态
+（那 13 个亮着的就是它）。这条不许靠清单声明就算数——次日用 `make verify-runs` 核。
 
 回滚这一源＝两处翻回去并重推：`values.yaml` 的 `party-regulation-library.suspend`
 改回 `false`、`values-server1.yaml` 的同项改回 `true`，然后
@@ -196,7 +203,43 @@ kubectl --context xinru -n scraw patch cronjob mfa-treaty-crawl --type=merge -p 
 
 **第 2 步与第 3 步之间必然有一段两侧都亮**（目标已起、旧宿主未关）。那一段的代价是
 同一源两行——所以顺序不能反：先起目标、核通，再关旧宿主，且要在同一小时内完成。
-`verify-sites` 拦的是**提交**层面的两侧同亮；运行层面的这段窗口靠人守。
+`verify-sites` 拦的是**提交**层面的两侧同亮；运行层面的这段窗口靠人守，事后用下面的
+`make verify-runs` 核（它读数据，不读清单）。
+
+## 单执行者：数据里只许一条 success（`make verify-runs ROWS=…`）
+
+`verify-sites` 判**声明**（两份 values 谁写了 `suspend: false`），`verify-runs` 判
+**行为**（库里到底几个执行者跑完了）。两者不能互替：清单两侧同亮能被拦，而「清单只有
+一侧亮、另一侧的 CronJob 对象是旧的/手工 apply 的」拦不住；反过来，行为侧的证据只在
+**两侧 pod 都真起来**时才留痕——2026-11-12 之前 server1 侧一律 `Failed 0/1`（pod 没起来、
+不写行），所以双跑长期不可见，不是没发生。
+
+```bash
+# 行数据由一次性查询 Pod 产出（scripts/single-executor-runs.mjs 头注有完整配方）
+kubectl --context xinru -n scraw logs runs | tail -1 > /tmp/rows.json
+make verify-runs ROWS=/tmp/rows.json SINCE=2026-11-14T05:00:00Z   # EXIT 1 双跑 / 2 判不出
+```
+
+`--since` 是「只看切换之后」：历史双跑不该让闸常年红，但被过滤掉的行会打印计数
+（今天 105 行全在切换前 ⇒ 报「判不出」，不是绿——**还没有一个轮次可判**）。
+
+**2026-11-14 的真红证**（7 天真实数据，不是自测造数）：6 组同窗双成功，其中 11-13 那轮
+三个源在**同一秒**两侧各写一行——
+
+| 源 | 时刻（UTC） | 两侧 tag |
+|---|---|---|
+| `party-regulation-crawl` | 11-13T19:40:01 / +1s | `sha-e584fc5` / `sha-b63d0d1` |
+| `ccdi-supervisory-crawl` | 11-13T19:50:01 / +1s | `sha-e584fc5` / `sha-b63d0d1` |
+| `gov-rules-crawl` | 11-13T19:30:01 / +0s | `sha-e584fc5` / `sha-b63d0d1` |
+| `mfa-treaty-crawl` | 11-13T19:20:01 / +0s | `sha-e584fc5` / `sha-b63d0d1` |
+| `party-regulation-crawl` | 11-11T19:40:01 / +301s | `sha-30f5179` / `sha-b63d0d1` |
+| `party-regulation-crawl` | 11-10T19:40:01 / +70s | `sha-b63d0d1` / `sha-30f5179` |
+
+而 `crawl_runs` **没有站点列**（列集已实测：`id/source/kind/status/started_at/
+finished_at/rows_written/error_head/commit_sha/image_tag/created_at/cancel_requested/
+pending_run_id/identity_alias/metrics/outcome/error_class/parse_error`，`metrics` 为空）。
+所以「哪一行是哪台机」只能靠 `image_tag` 反推——**两站点对齐到同一片之后连这也分不出来**，
+主判据因此必须是「一个窗内只有一条 success」，不能依赖 tag。
 
 ## 联邦 pin 必须等于 chart 的镜像（`make verify-pins ROWS=…`）
 

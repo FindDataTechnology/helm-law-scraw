@@ -21,7 +21,7 @@ else
 PRIVATE_ARGS := -f $(PRIVATE_VALUES)
 endif
 
-.PHONY: help lint verify-deps verify-hygiene verify-report verify-sites verify-pins verify-secrets render dep-build install upgrade package
+.PHONY: help lint verify-deps verify-hygiene verify-report verify-sites verify-pins verify-runs verify-secrets render dep-build install upgrade package
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | \
@@ -40,8 +40,11 @@ verify-pins: ## Assert crawl_sources.runner_image equals the chart's image (need
 	@test -n "$(ROWS)" || { echo "用法: make verify-pins ROWS=/tmp/rows.json（行数据由一次性查询 Pod 产出，见脚本头注）"; exit 2; }
 	./scripts/verify-federated-runner-pins.py --rows $(ROWS)
 
-verify-deps: ## Assert vendored charts/*.tgz match Chart.yaml (name+version, no stale leftovers)
-	./scripts/verify-chart-deps.sh
+verify-runs: ## Assert one success per schedule window per source (needs --rows from a query Pod)
+	@test -n "$(ROWS)" || { echo "用法: make verify-runs ROWS=/tmp/rows.json [SINCE=2026-11-14T05:00:00Z]（行数据由 scripts/single-executor-runs.mjs 产出，见脚本头注）"; exit 2; }
+	./scripts/verify-single-executor-runs.py --rows $(ROWS) $(if $(SINCE),--since $(SINCE))
+
+verify-deps: ## Assert vendored charts/*.tgz match Chart.yaml (name+version, no stale leftovers)	./scripts/verify-chart-deps.sh
 
 verify-hygiene: ## Assert no internal endpoints / account ids in tracked files
 	./scripts/assert-no-internal-endpoints.sh
