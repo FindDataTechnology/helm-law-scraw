@@ -133,6 +133,31 @@ kubectl --context xinru -n scraw patch cronjob mfa-treaty-crawl --type=merge -p 
 同一源两行——所以顺序不能反：先起目标、核通，再关旧宿主，且要在同一小时内完成。
 `verify-sites` 拦的是**提交**层面的两侧同亮；运行层面的这段窗口靠人守。
 
+## 联邦 pin 必须等于 chart 的镜像（`make verify-pins ROWS=…`）
+
+`crawl_sources.runner_image`（`kind='federated'`）是 **chart 镜像的手抄副本**：
+`dispatch.sync_sources` 整段跳过 federated 行，副本一旦抄下来就没有任何东西再对齐它。
+dispatcher 造 Job 时直接拿这一列当镜像 —— 所以它漂了，症状是「异常触发跑起来的是
+N 代前的代码」，而不是宕机。
+
+已经在 2026-10-14 咬过一次（`sha-3ca3e8b` 被 ccr 逐出 ⇒ 批量 ImagePullBackOff，
+维护成 alembic `0011_federated_runner_tag`）。**2026-11-14 实测又漂了**：7 行全钉
+`sha-e9c1c11`，chart 与线上 CronJob 已是 `sha-c33bf67`——而且是手工改上去的
+（0011 的锚点是 `sha-b63d0d1`，DB 里却是 e9c1c11，中间无任何提交记录）。
+
+```bash
+# 1) 行数据由一次性查询 Pod 产出（本机没有 psql，也不该把 DSN 摊在命令行）
+#    同族用法见记忆「查询 Pod 模式」；脚本只要 [{source,img}]
+kubectl --context xinru -n scraw logs runs | tail -1 > /tmp/rows.json
+# 2) 比对
+make verify-pins ROWS=/tmp/rows.json      # EXIT 1 = 分叉，2 = 判不出
+```
+
+三条刻意的边界：**R2 无主只报事实**（`guide-cases-crawl` / `wenshu-crawl` 不在这张
+chart 里，没有所有者就没有可比的另一侧，判红会变成常年红的闸）；**判不出退 2**
+（没有行数据、渲染失败、0 条 federated 行都不许读成「都对齐」）；**改法只写「新增
+alembic revision」**，不写手工 UPDATE —— 上一次手工改没留出处，正是这次漂移的来源。
+
 ## Images
 
 - `images.legalSources` — ccr.ccs.tencentyun.com/lawcraw-business/fd-law-data,
