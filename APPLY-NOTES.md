@@ -303,6 +303,23 @@ legalSources:
 今晚 02:25 CST 前那轮预拉起会开出登录站，需要有人在 Console 里完成登录；
 登录成功后按 `authenticated-crawling` 规格，平台会立刻为该 profile 入队一次执行。
 
+**改完的当场 A/B（同代码、同数据，只差那个 env）**：用
+`create job --from=cronjob/legal-sources-report` 跑当前版本，两次对照——
+
+| crawl_runs | 时刻（UTC） | env | 结果 |
+|---|---|---|---|
+| 5916 | 11-14T12:21 | `LEGAL_PAUSED_SOURCES=rmfyalk-case-library` | `success`（**假绿**） |
+| 5929 | 11-14T14:10 | `LEGAL_PAUSED_SOURCES=""` | `failed`，`exit=2 \| stale=rmfyalk-case-library` |
+
+同一份镜像、同一份数据、相隔两小时 ⇒ 红绿之分完全由这行 env 决定。
+这比「等今晚 06:00 看结果」强：它当场证明了告警恢复，而不是证明「今天恰好红」。
+
+**两个 broker 都能用今晚这份登录**（另一处会静默失效的前提）：会话 jar 存在
+RustFS 桶（`lib/auth-broker/s3-session-store.js`），不是本地卷；两侧 broker 的
+`RUSTFS_ENDPOINT`/`LAWS_BUCKET` 逐字相同，`legal-auth-broker` Secret 的
+`jar-key`/`broker-token`/`vnc-password` 三键 sha256 也相同（只打印 sha，不打印值）。
+所以「在 server1 那侧登录、由 master 那侧爬」不会解密失败。
+
 ## 单执行者：数据里只许一条 success（`make verify-runs ROWS=…`）
 
 `verify-sites` 判**声明**（两份 values 谁写了 `suspend: false`），`verify-runs` 判
@@ -674,6 +691,17 @@ kubelet stats: 根分区 capacity 38.80 GiB / used 31.65 GiB / available 7.13 Gi
 顺带记一条当天的状态：`scraw` 里 2 个 `Pending` 是 `ContainerCreating`
 （`fd-industry-dispatcher`、`federation-observer`），`PodScheduled True`、
 没有 `FailedScheduling` —— 属于正在拉镜像，**不要当调度失败处理**。
+
+**同日补齐的漏洞：`flk-law-crawl` / `flk-law-embed` 此前是全站唯一两个没有
+`resources` 的作业**（`legalSources` 那 12 个有，它们没有；`NODE_OPTIONS` 也没有）。
+最忙的爬虫无上限 = 跑飞就吃掉整台 3.64 GiB、内核随机杀一个（同族于 09-24 那次）。
+已补成与兄弟作业同档（requests 100m/256Mi、limits cpu 1 / mem 2Gi），模板用 `with`
+包裹（值为空则不渲染）。**刻意没加 `NODE_OPTIONS`**：兄弟那条 384MB 是 09-24 实测
+「堆过 ~800MB 被内核杀」的经验值，flk 没有同类实测——照抄一个堆上限可能把它自己
+压死，而 V8 堆耗尽比 cgroup OOM 更难查。要加先量。
+量的时候会发现：**安静日量不出峰值**。当天从线上 CronJob 派生一次实跑（跑的是当前
+版本），13 秒完成、各分类 `total: 0`——没有新条目就不会走到重内存路径。所以档位取
+「远高于 09-24 实测 ~800MB」的 2 GiB，而不是拿 13 秒那次当依据。
 
 ## 出片记录 2026-11-11：统一到 `sha-30f5179`
 
