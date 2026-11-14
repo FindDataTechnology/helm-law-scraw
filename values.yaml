@@ -354,17 +354,18 @@ legalSources:
       # （insertedLaws=59、chunks=2031、exportShards=10，laws 3245→3304），
       # 但那是手工补的，不解决每天新增的积压。
       #
-      # ⚠ 现在必须保持 suspend: true，解除条件是**镜像侧**先满足：
-      #   目标集群上该作业实际跑的 fd-law-data 镜像，其源码必须含 3fa5d29
-      #   （`SELECT title, to_jsonb(laws) ->> 'doc_number' …`）。旧片里
+      # ⚠ 必须保持 suspend: true，直到**镜像里**真的有那段代码。
+      #   条件：目标集群该作业跑的 fd-law-data 镜像，`grep -n "to_jsonb(laws)"
+      #   /app/lib/law/identity.js` 有命中（修复 3fa5d29）。旧片里
       #   findCrossGenerationDuplicate 裸投影 doc_number，而生产 laws 表没有
-      #   这一列 ⇒ 每条记录抛 42703、整批一条也写不进去，只会在 crawl_runs
+      #   这一列 ⇒ 每条记录抛 42703、整批一条也写不进去，只在 crawl_runs
       #   留一行 running 然后被预算回收。
-      #   判据（别拿"chart 改了"当"线上跑了"）：`kubectl -n scraw get cronjob
-      #   flk-law-load -o jsonpath='{.spec.jobTemplate.spec.template.spec.containers[0].image}'`
-      #   的 tag 落在 sha-f01a776 或更新（f01a776 的源码已含 3fa5d29，2026-11-14 核）。
-      #   把 suspend 改 false 的那一笔，必须同时确认线上 tag 已到位——
-      #   "启用了但跑着旧代码"正是本仓反复踩的形态。
+      #   **别拿 tag 当判据**（2026-11-14 实历）：sha-f01a776 的源码确实含
+      #   3fa5d29（fd-law-data 481d475 是其后代），但该 tag 是**快照仓**的
+      #   commit 短 sha，铸片时的源码树停在 14961d7，进镜像 grep 第 50 行仍是
+      #   `SELECT title, doc_number`。点亮后又靠一次性 Job 才验出来——那轮
+      #   「0 daily file(s) to process / success」是零覆盖的绿，根本没走到这段
+      #   代码。点亮前先 grep 镜像，这是唯一判据。
       schedule: "30 4 * * *"
       suspend: true
       source: flk-law
