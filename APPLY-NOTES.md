@@ -839,3 +839,44 @@ success」，不看 `rows_written`，不会把 0 行判红。
 `Incorrect username or password (access token)`），而站行状态照旧写着
 `waiting_operator`、面板日志照旧写 `station #NN launched`。修法与核对配方见
 `~/.zcode/.../memory/connectivity-proves-network-not-credential-parity.md`。
+
+### rmfyalk 的登录是「辅助式 OAuth」，不是「登一下就行」（2026-11-14 读代码定死）
+
+前面写了「晚上自己方便的时候开站登录」，但**动作到底是什么**在代码里，值得写清楚——否则
+下一次还是会有人对着 VNC 干等，或者以为改一行库状态就能补上：
+
+- 身份状态的翻转**只发生在登录单元里**。`fd_open_data_mcp` 全仓没有任何一处把
+  `crawl_identities.status` 写成 `active`（除 proxy 播种那条无关路径）；面板也没有「手工置
+  active」的入口。唯一通路是站容器跑 `scripts/login_station.py` → 加载
+  `spiders/<source>/login.py` → 成功后 `auth.complete_login(..., probe_ok=True)`
+  （`fd_industry_data/auth.py:271`，docstring 就写着 `login_required -> active`）。
+  ⇒ **手工改库不是既定路径**，而且会让「会话其实不存在」这件事被状态掩盖。
+- rmfyalk 那个单元是 `automation = "assisted"`（`spiders/rmfyalk/login.py`）：取
+  `getGdLoginUrl` → 在浏览器里打登录页 → **操作者自己完成法信 OAuth** → 抓
+  `loginGd` 回调的 `userToken` + storageState 存成 jar。所以站开出来之后**必须有人在
+  VNC 里把这步做完**，光开着窗口不会自愈。
+- 操作者有时间预算：`FD_HUMAN_BUDGET_SECONDS`（缺省 600s）。单元头注记着 2026-10-08
+  固定 600s 让 #16–#19 全死在「操作者还没摸到窗口」，所以预算跟站点的 env 走、不跟模块常量。
+- **登录成功会立刻派发该源一轮爬取**（`login_station.py` 里 `complete_login` 之后紧跟
+  `dispatch.enqueue_for_auth_profile`）。这条很实用：晚上登录不只是「为明早 03:10 备好」，
+  而是**当场就能补上当天丢掉的那一轮**，不必等下一个排期点。
+- 判断「到底登进去了没」不看站行状态、不看 pod，看 `crawl_identities` 的
+  `last_login_at` / `last_probe_at` / `last_success_at` 三个时间戳是否推进，以及
+  `crawl_runs` 上是否多出一条该源的 run。
+
+**顺带一条线上已知缺陷与临时解法**（修复分支已推、未出片）：现役面板的超时兜底
+`_apply_timeouts` 是「读时生效」（列站/打开 VNC 才跑），而 5 分钟的预拉起循环**从不读站表**
+⇒ 任何一次「Job 被 deadline 杀掉、没来得及上报终态」都会留下一行 `waiting_operator` 永久
+不过期，预拉起从此认为「操作者正看着」，再也不开新站。实历：2026-11-10 18:28Z 建的那行一直
+挂到 11-14 才被收，中间每一次预拉起都被它吃掉，而面板每 5 分钟照打
+`prearm: no station needed this pass`（这句话在「站真的不用开」和「被僵尸站挡住」两种情形下
+**逐字相同**，所以不能拿它当判据）。未出片前的临时解法只有两条，按顺序：
+
+1. 打开一次面板的登录站列表/站详情页（触发读时兜底），或
+2. 按面板自己的词汇把那一行收成 `timeout` 并补 `finished_at`
+   （`UPDATE crawl_login_stations SET status='timeout', finished_at=now() WHERE id=? AND status IN ('launching','waiting_operator')`），
+   再删掉 `login-<source>-<alias>-<suffix>` 那个 Job（按精确名字删）。
+
+判据：`select count(*) from crawl_login_stations where status in ('launching','waiting_operator')`
+必须为 0，否则下一次预拉起一定被挡。出片后的验收不是「pod Running」，而是面板日志里出现
+`prearm: closed N expired login station(s) before planning`。
