@@ -175,8 +175,10 @@ Job 回填 `crawl_runs`，`FED_NAMESPACE=scraw`，两边看的是不同 Job 集�
   14400 → **28800**（对齐线上）。09-24 `96b6892` 已把四个 catalog 爬虫的墙抬到 8h
   （CCDI 撞过 4h 墙），但那笔只改了清单、没回写 chart——整份 apply 会把墙砍回 4h。
 - 仍存的**惰性**差异：chart 多一个 `FD_RUNNER_IMAGE_TAG`（被镜像自报的
-  `/app/IMAGE_TAG` 压过，无行为影响）；线上 `legal-sources-report` 多一个
-  `FD_RUN_STARTED`（带外加的，apply 不会删）。
+  `/app/IMAGE_TAG` 压过，无行为影响）；`legal-sources-report` 上 chart 多
+  `FD_SCHEMA_MANAGED`（线上没它也已稳定跑出 `rows=47309`，加不加都只是「跳过 DDL」）、
+  线上多带外加的 `FD_RUN_STARTED`（apply 不会删）。这三处都**不动线上**——
+  为对齐而改一个正在正常出数的作业，风险大于收益。
 
 ## 出片记录 2026-11-11：统一到 `sha-30f5179`
 
