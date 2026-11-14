@@ -770,3 +770,37 @@ mfa-treaty-crawl, party-regulation-crawl, rmfyalk-case-crawl
 
 顺带给 rmfyalk 重登留个判据：重登成功后该行应从 `login_required` 变 `active`，
 且 `last_success_at` 前移到当天。
+
+## `party-regulation` 两段常年 `rows_written=0` 是**正常**，不是空转（2026-11-15 查证）
+
+看板/crawl_runs 上这两个源 30 天全是 `success + 0 行`，容易被读成「绿得比绿还真」那一族
+（占位行把失败伪装成成功）。逐层查完，结论是**这条链没有缺陷**，判据如下：
+
+1. **crawl 段的 0 行是设计**：`party-regulation-crawl.mjs` 只把变更写进桶
+   （`laws/legal-sources/party-regulation-library/structured/*.jsonl`），不写库，所以
+   `crawl_runs.rows_written` 恒 0。`flk-law-crawl` 同理。
+2. **load 段的 0 行是「全 unchanged」**：`legal-source-load.mjs` 里
+   `if (!records.length) throw new Error('no structured records under …')` —— 桶里真没记录
+   会**报错**，而它报 success，故一定读到了记录，只是 `inserted+updated==0`。
+3. **语料本身小且没变**：`legal_documents` 按源计数
+   （2026-11-15 04:50Z 实测，`law_db`）：
+   `rmfyalk 22487 / gov-rules 10603 / mfa-treaty 7453 / ccdi 6420 / party 391`。
+   桶里 `party` 的 `state.json` 只有 `hashes: 197` 个、`watermark: null`
+   （无日期增量，每轮回看全部 197 条），structured 4 个 part / 7.39MB
+   —— 对照 `gov-rules` 是 10,593 个 hashes / 43 parts / 136MB。
+4. **391 ≠ 197 的原因**：party 是 **versioned 适配器**，每份文档按修订版存一行
+   （`URL@v-<hash>`，见 `lib/legal-sources/state.js` 的 `stateKeyOf` 头注
+   「party audit 2026-10-10: 0 of 193 documents ever hit a known key」）⇒
+   391 行 ≈ 197 个实体 × 约两版。10-10 那次 `state.json.bak-*` 是 state rebuild。
+
+**所以今晚 19:40Z 试点的正确结果是 `success + rows_written=0`**，不是冷启动成功。
+要看「它到底动没动」，只有三个判据（都别拿 rows 判）：
+
+- `scraw/crawl_runs` 有一条新的 `party-regulation-crawl` success（行为已跑）；
+- 桶里 `legal-sources/party-regulation-library/state.json` 的 `updatedAt` 前移
+  （爬虫真的回看过；2026-11-15 实测 11-14T04:50Z）；
+- `law_db.legal_documents` 里 `source='party-regulation-library'` 的计数与 `newest`
+  （`fetched_at`）——**只有源站发了新东西才会动**，不动是常态。
+
+`make verify-runs` 不受影响：`verify-single-executor-runs.py` 只判「一个排期窗内一条
+success」，不看 `rows_written`，不会把 0 行判红。
