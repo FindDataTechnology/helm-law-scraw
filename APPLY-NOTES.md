@@ -880,3 +880,24 @@ success」，不看 `rows_written`，不会把 0 行判红。
 判据：`select count(*) from crawl_login_stations where status in ('launching','waiting_operator')`
 必须为 0，否则下一次预拉起一定被挡。出片后的验收不是「pod Running」，而是面板日志里出现
 `prearm: closed N expired login station(s) before planning`。
+
+### 报表里 `last_crawl_at` 不是「上次爬取时间」（2026-11-15 读 report.js + 线上读数定死）
+
+日报告（`legal-sources-report`）每个源有四个时间字段，**含义各不相同，混读会得出相反结论**：
+
+| 字段 | 真实含义 | 2026-11-15 实读 |
+|---|---|---|
+| `freshness_at` | 判新鲜度的**锚点**＝`max(runAt, state.json.updatedAt, max(fetched_at))` | 四个源都＝今天的 `state.json.updatedAt` |
+| `coverage.state_updated_at` | crawl 每轮的存活检查点（**零新增也推进**） | 19:34–20:21Z（都在今天） |
+| `db.last_fetched_at` | 库里**最新一行的写入时刻**（内容没变就不动） | party 冻在 10-08、gov-rules 11-06 |
+| `last_crawl_at` | **只算 `emitted > 0` 的跑批**＝上一次「真产出了东西」的时刻 | gov-rules 11-06、party 10-08、ccdi 11-09 |
+
+所以 `last_crawl_at` 停在十天前**不是断流**：`report.js:169-173` 明确只用 `emitted>0` 的 manifest
+当锚点（2026-11-10 mfa-treaty 那次误报的教训），安静上游永远没有 `emitted>0` 的跑批。判
+「这源今天跑没跑」看 `coverage.state_updated_at` 或 `crawl_runs`；判「是否断流」看
+`status`/`freshness_hours`（>48h 才红）。**同一族的坑已经在 `rows_written=0` 上踩过一次，
+这是第二次**——数据库里那些「冻住」的计数与时间戳，几乎都是「内容没变所以不写」的正常态，
+真正的判别量是**读取侧**（装载日志的 `recordsRead`，或报表的 `state_updated_at`）。
+
+顺带一条已核的正面结论：五个源的 `effective_body_ratio` 实测 1.0 / 1.0 / 0.9995 / 0.9974 /
+0.9998（正文 ≥50 字符者占全部行的比例），**没有空壳文书问题**，别再去查这一栏。
