@@ -155,15 +155,16 @@ Job 回填 `crawl_runs`，`FED_NAMESPACE=scraw`，两边看的是不同 Job 集�
 （或 `make render`；**两个 -f 都要** —— 内网端点与账号标识在带外那份里）
 - **runner_image 同步义务**：升级 `images.legalSources.tag` 时必须同步 `crawl_sources.runner_image`（dispatcher 触发的 Job 用登记值，不是 chart 值）——drill 4.2 曾因此跑旧镜像。
 
-### chart 管不到的两个对象（apply 不会重建它们）
+### 两个不在本 chart 里的 scraw 作业（各有其真源，别重复发布）
 
-- **`flk-law-embed`**（05:30，读 `laws-export` 分片写 Qdrant）——真源是
-  `fd-law-data/k8s/flk-embed-cronjob.yaml`，手工 apply；chart 里没有它的模板。
+- **`flk-law-embed`**（05:30，读 `laws-export` 分片写 Qdrant）——**2026-11-14 已收进本
+  chart**（`templates/flk-law-embed-cronjob.yaml`，值在 `flkLawEmbed`）。此前它只有
+  `fd-law-data/k8s/flk-embed-cronjob.yaml` 那份手工清单 ⇒ chart 重建不出来、换集群
+  静默消失，症状是「检索里没有新法条」而没有任何告警。
 - **`federation-observer`**（*/15，按**本集群** scraw 的 Job 历史回填 `crawl_runs`，
-  `FED_NAMESPACE=scraw`）——两个集群各跑一个，各自看自己的 Job 集合，不是重复。
-
-这两条不在 chart 里 ⇒ 换命名空间/新集群时**必须单独 apply**，否则 embed 会静默停摆
-（`flk-law-load` 就吃过这个亏：10-06 chart 接管时漏了它，40 天只爬不载）。
+  `FED_NAMESPACE=scraw`）——真源在 **`fd-industry-data/k8s/federation-observer.yaml`**
+  （另有 `k8s/release.yaml` 引用），**不属于本 chart**；搬进这里会变成两份真源。
+  两个集群各跑一个，各自看自己的 Job 集合，不是重复。
 
 ### 2026-11-14 收敛的 chart↔线上漂移
 
