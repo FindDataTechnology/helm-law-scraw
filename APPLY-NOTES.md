@@ -804,3 +804,38 @@ mfa-treaty-crawl, party-regulation-crawl, rmfyalk-case-crawl
 
 `make verify-runs` 不受影响：`verify-single-executor-runs.py` 只判「一个排期窗内一条
 success」，不看 `rows_written`，不会把 0 行判红。
+
+## rmfyalk 登录窗口为什么总落空，以及正确的登录时间（2026-11-14 查证）
+
+**现象**：预拉起在每轮爬虫开火前 45 分钟开站（`rmfyalk-case-crawl` 是
+`10 3 * * *` Asia/Shanghai ⇒ 开火 03:10 CST，站点 **02:25 CST** 打开、60 分钟后关）。
+这个点人基本不在，于是每轮的派发都记 `auth pool dry: no active unleased identity`，
+源长期零产出，而站本身每次都是好的。
+
+**两条判据决定「其实不用熬到 3 点」**：
+
+1. **派发器的身份判据只看状态，不看新鲜度** —— `fd_industry_data/auth.py`
+   的 `lease_identity()` 选行条件是
+   `source=<auth_profile> AND status='active' AND lease_token IS NULL`，
+   **没有 `last_probe_at` 时间窗**。所以只要身份是 `active`，几小时前登录的一样能被 03:10 那轮租到。
+2. **预拉起只在「身份不新鲜」时才开站** —— `station_ops._fresh_identity()` 要求
+   `status='active'` 且 `last_probe_at` 在 `FD_PREARM_FRESH_HOURS`（默认 6）内。
+   所以晚上登录过的身份，到次日 02:25 若仍在新窗口内，预拉起**不会重复开站**（这是对的）。
+
+**可操作结论**：在**晚上自己方便的时候**用 Console 开站并完成一次 rmfyalk 登录即可，
+不必等到 02:25。约束只剩一条客观事实——**站点侧的会话本身要能撑到 03:10**（不是代码闸，
+是 rmfyalk 自己的过期时间）。若怕撑不住，次优选择是在 02:25 站点打开后尽快登。
+
+**另外两条今晚实测的时间量纲**（判「还来得及吗」时别用错）：
+
+- **站窗口 60 分钟**（`FD_STATION_DEADLINE_SECONDS` 默认 3600），但
+- **派发窗口只有 15 分钟**（`fd_industry_data/dispatch.py` 的 `enqueue_due(window_minutes=15)`，
+  派发 tick 每 5 分钟）⇒ 19:10Z 的开火点只在 19:10/19:15/19:20/19:25 四次尝试，
+  **19:25Z 之后登录对当轮无效**（2026-11-13 与 11-14 两天的 pending_runs 都是这四行）。
+
+**站建出来了但 VNC 打不开时，先看 init 容器日志**（2026-11-14 实历）：
+`kubectl -n fd-mcp logs <station-pod> -c checkout` —— 当晚是 gitee 令牌在
+`tencent/fd-industry` 那份更新了、`xinru/fd-mcp` 这份没更新（克隆报
+`Incorrect username or password (access token)`），而站行状态照旧写着
+`waiting_operator`、面板日志照旧写 `station #NN launched`。修法与核对配方见
+`~/.zcode/.../memory/connectivity-proves-network-not-credential-parity.md`。
