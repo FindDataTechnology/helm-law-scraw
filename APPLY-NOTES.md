@@ -132,13 +132,28 @@ helm template law-craw . --namespace scraw -f values-private.yaml \
   postgresql objects (disabled), nor any external object (names verified).
 
 
-## 法律线宿主：xinru-server1（2026-10-07 迁移后）
+## 法律线宿主：xinru（2026-11-14 更正；此前写的是 xinru-server1）
 
-法律线全家驻 xinru-server1 scraw ns（独立 k3s、节点级 ccr 认证、docker.io 轩辕加速已配）。
-- 渲染：`helm template law-craw . --namespace scraw -f values-server1.yaml -f values-private.yaml`
-  （或 `make render`；**两个 -f 都要** —— 内网端点与账号标识在带外那份里）
+**现状**：法务线唯一在跑的宿主是 **`xinru` 集群 `scraw` ns**（14 个点亮作业，镜像
+`sha-492925f`）。`xinru-server1` 上的同名作业已全部 `suspend=true`，只保留
+`fd-industry-dispatcher`（该集群独有）与 `federation-observer`（按**本集群** scraw 的
+Job 回填 `crawl_runs`，`FED_NAMESPACE=scraw`，两边看的是不同 Job 集合，不是重复）。
+
+**为什么要更正**：本节原来写「宿主 xinru-server1（2026-10-07 迁移后）」，但 2026-10-06
+之后所有出片与修复都落在 xinru，server1 那套一路停在 `sha-b63d0d1`——于是**两边同时
+按 CST 窗口点火**：同一 source 同一分钟在 `crawl_runs` 留两行、爬取请求翻倍，
+而 server1 那侧还缺 2026-11-13 修的 `lib/http.js` 半开响应体超时（就是那批「进程睡死
+8 小时、零日志零重试」的成因）。2026-11-14 实测两边 lastScheduleTime 全部对得上当日窗口，
+确认是双份而非「一边备份」。
+
+**回滚**（若决定改回 server1）：先在 server1 把 11 个作业 `suspend` 改回 false——
+`ccdi-supervisory-{crawl,load}`、`flk-law-crawl`、`gov-rules-{crawl,load}`、
+`legal-sources-report`、`mfa-treaty-{crawl,load}`、`party-regulation-{crawl,load}`、
+`rmfyalk-case-load`——再去 xinru 对应挂起，**任何时刻只留一侧点亮**。
+
+**渲染**：`helm template law-craw . --namespace scraw -f values-server1.yaml -f values-private.yaml`
+（或 `make render`；**两个 -f 都要** —— 内网端点与账号标识在带外那份里）
 - **runner_image 同步义务**：升级 `images.legalSources.tag` 时必须同步 `crawl_sources.runner_image`（dispatcher 触发的 Job 用登记值，不是 chart 值）——drill 4.2 曾因此跑旧镜像。
-- xinru 侧 13 个挂起 CronJob 为回退，稳定一周后清理。
 
 ## 出片记录 2026-11-11：统一到 `sha-30f5179`
 
