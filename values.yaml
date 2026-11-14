@@ -354,20 +354,17 @@ legalSources:
       # （insertedLaws=59、chunks=2031、exportShards=10，laws 3245→3304），
       # 但那是手工补的，不解决每天新增的积压。
       #
-      # ⚠ 必须保持 suspend: true，直到**镜像里**真的有那段代码。
-      #   条件：目标集群该作业跑的 fd-law-data 镜像，`grep -n "to_jsonb(laws)"
-      #   /app/lib/law/identity.js` 有命中（修复 3fa5d29）。旧片里
-      #   findCrossGenerationDuplicate 裸投影 doc_number，而生产 laws 表没有
-      #   这一列 ⇒ 每条记录抛 42703、整批一条也写不进去，只在 crawl_runs
-      #   留一行 running 然后被预算回收。
-      #   **别拿 tag 当判据**（2026-11-14 实历）：sha-f01a776 的源码确实含
-      #   3fa5d29（fd-law-data 481d475 是其后代），但该 tag 是**快照仓**的
-      #   commit 短 sha，铸片时的源码树停在 14961d7，进镜像 grep 第 50 行仍是
-      #   `SELECT title, doc_number`。点亮后又靠一次性 Job 才验出来——那轮
-      #   「0 daily file(s) to process / success」是零覆盖的绿，根本没走到这段
-      #   代码。点亮前先 grep 镜像，这是唯一判据。
+      # ✅ 2026-11-14 点亮。判据是**镜像内容**，不是 tag（tag 是镜像仓 commit
+      #   短 sha、与源码 sha 不同源，本作业曾因此误点亮过一次）：
+      #   ① `grep -n "to_jsonb(laws)" /app/lib/law/identity.js` 有命中
+      #      （sha-492925f 的第 49/56 行，已核）；
+      #   ② 真代码路径：在该镜像里对真 law_db 调 findCrossGenerationDuplicate
+      #      —— 已存在的标题 → true、不存在的 → false、无 42703（已核）。
+      #   回归红线：旧片裸投影 doc_number，而生产 laws 表没有这一列 ⇒ 每条
+      #   记录抛 42703、整批一条也写不进去，只在 crawl_runs 留一行 running
+      #   然后被预算回收。任何一次抬 tag 之前，先重跑 ① ② 再谈启用。
       schedule: "30 4 * * *"
-      suspend: true
+      suspend: false
       source: flk-law
       activeDeadlineSeconds: 7200
       command: ["node", "bin/flk-load.mjs"]
