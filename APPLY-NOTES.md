@@ -124,6 +124,27 @@ party-crawl-pilot` 手工跑一轮：
 配方里必须写 `apply -n scraw -f -`，误建后按精确名删掉（`kubectl -n default
 delete cronjob party-regulation-crawl`），别去 grep 宽匹配。
 
+### 切换前提：两站点的凭据必须一致（`make verify-secrets`）
+
+**「能连」不等于「能用同一份凭据」。** 2026-11-14 的连通性探针走的是 crawl 库
+`fd_open_data` + `laws` 桶，全绿；可 load / report 走的是另一个库、另一份口令，
+探针完全看不到。逐键 sha256 比下来（脚本只打 8 位哈希与长度，从不打印值）：
+
+| secret / key | master | server1 | 影响 |
+|---|---|---|---|
+| `flk-law-pg-credentials` / `pg-password` | `3515c8f6`(28B) | `d40c7c11`(28B) | **load 与 report 搬过去必然「Password 认证失败」**；server1 侧 30 天内 10 轮失败全是这句 |
+| `flk-embed-credentials` / `embed-api-key` | 有 | **没有** | **flk-law-embed 在 server1 起不来** |
+| `legal-identity-rmfyalk-acct001` / `crawl_proxy_url`、`login_proxy_url` | 同值(54B) | 同值(49B，二者相等但≠master) | rmfyalk 会走另一个代理；是设计还是漂移待确认 |
+| `federation-db`/`url`、`flk-law-crawl-credentials` 两个 dashed 键、`legal-auth-broker` 三键 | — | **同值** | crawl 可以搬（party 试点已实测通过） |
+
+所以**逐源翻的顺序被这份矩阵决定**，不是按「源有多轻」：
+crawl 类今天就能搬；load / report 要先对齐 `pg-password`；`flk-law-embed` 要先补
+secret。`verify-secrets` 红了就别翻，它列的四条正是四处会在真跑时才炸的差异。
+
+**为什么只比 chart 引用的那些键**：两份 secret 的键集本就会因为 `envFrom` 与显式
+`secretKeyRef` 两种写法分叉（实测 server1 的 `flk-law-crawl-credentials` 是超集，
+多了 `RUSTFS_*` 大写键）；比全量会把这种设计差异报成红。只比 pod 真会读的那几个。
+
 ### 切换进度（逐源翻，别一次全翻）
 
 | 源 | 生效站点 | 依据 |

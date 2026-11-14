@@ -21,7 +21,7 @@ else
 PRIVATE_ARGS := -f $(PRIVATE_VALUES)
 endif
 
-.PHONY: help lint verify-deps verify-hygiene verify-report verify-sites verify-pins render dep-build install upgrade package
+.PHONY: help lint verify-deps verify-hygiene verify-report verify-sites verify-pins verify-secrets render dep-build install upgrade package
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | \
@@ -32,6 +32,9 @@ lint: verify-sites ## Run helm lint
 
 verify-sites: ## Assert no CronJob is lit on two sites at once (base + every site overlay)
 	./scripts/verify-site-exclusivity.py
+
+verify-secrets: ## Assert every chart-referenced secret key holds the same value on both sites (hash-only)
+	./scripts/verify-site-secret-parity.py
 
 verify-pins: ## Assert crawl_sources.runner_image equals the chart's image (needs --rows from a query Pod)
 	@test -n "$(ROWS)" || { echo "用法: make verify-pins ROWS=/tmp/rows.json（行数据由一次性查询 Pod 产出，见脚本头注）"; exit 2; }
