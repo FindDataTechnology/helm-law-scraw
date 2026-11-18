@@ -81,7 +81,7 @@ SITE_VALUES = {
 #: 仓库变成标识清单。
 KNOWN_DIVERGENCE = {
     ("legal-identity-", "crawl_proxy_url"): (
-        "同一 proxy id（两站点 id 值相同）的两个不同出口：xinru 出 134.175.46.69、"
+        "同一 proxy id（两站点 id 值相同）的两个不同出口：xinru 出 <site-exit-ip>、"
         "server1 出 111.230.147.208，两侧实测 200 / 各约 0.4s ⇒ 不是「一份拷贝过期」，"
         "是两个都活着的站点本地出口。该源当前两站点都挂起、broker 只回 /health。"
         "**解除条件**：当它所属的源在某一站点成为唯一执行者（另一站点 broker 置 0 副本，"

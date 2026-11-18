@@ -1,6 +1,6 @@
 # APPLY-NOTES — helm-law-scraw on xinru (converged 2026-10-06)
 
-This chart is converged to the xinru cluster (`xinru-master`, 134.175.46.69,
+This chart is converged to the xinru cluster (`xinru-master`, <site-exit-ip>,
 namespace `scraw`) live inventory. **Standard apply command (when a wave is
 approved):**
 
@@ -151,7 +151,7 @@ delete cronjob party-regulation-crawl`），别去 grep 宽匹配。
 会不会起不来」。R2 只在**两站点都必需**时才要求同值。
 
 **proxy 那条为什么判成「已裁决」而不是对齐**：同一个 proxy id（两站点 id 值逐字节相同），
-两个 URL 实测都活着、出口 IP 不同——xinru 出 `134.175.46.69`，server1 出
+两个 URL 实测都活着、出口 IP 不同——xinru 出 `<site-exit-ip>`，server1 出
 `111.230.147.208`（异地备份机）。所以不是「一份拷贝过期」，而是两个站点各自的本地方案。
 按 `legal-line-federation` 的裁定（宿主 = server1）迁移完成后，另一站点 broker 应置 0 副本、
 两侧收敛到留用站点的值——**这就是该条在脚本里的解除条件**。
