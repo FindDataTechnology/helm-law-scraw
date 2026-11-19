@@ -57,10 +57,10 @@ verify-hygiene: ## Assert no internal endpoints / account ids in tracked files
 verify-report: verify-deps verify-hygiene ## Assert the report CronJob keeps its crawl_runs recorder (incl. load_stalled)
 	./scripts/assert-report-recorder.sh
 
-render: ## Render the chart for xinru (needs values-private.yaml for the internal endpoints)
+render: ## Render the chart for the db host (needs values-private.yaml for the internal endpoints)
 	helm template $(RELEASE) . --namespace $(NAMESPACE) -f values-server1.yaml $(PRIVATE_ARGS)
 
-render-base: ## Render the chart for the base site (= xinru-master, values.yaml only)
+render-base: ## Render the chart for the base site (= the master, values.yaml only)
 	helm template $(RELEASE) . --namespace $(NAMESPACE) -f values.yaml $(PRIVATE_ARGS)
 
 dep-build: ## Fetch Bitnami subchart dependencies

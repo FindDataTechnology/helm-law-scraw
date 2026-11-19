@@ -18,12 +18,12 @@
    不把 Job 算进来：一次性 Job 是瞬时形态，它引用过的 secret 不构成长期义务。
    这一路回答「**现在就会起不来的**」——它抓到了 11-13 那 10 轮失败，因为当时
    server1 的 load 对象是活的（overlay 写 suspend 也没用，线上才是事实）。
-2. **该站点渲染里点亮的对象** —— `values.yaml`（base=xinru-master）与
+2. **该站点渲染里点亮的对象** —— `values.yaml`（base=the master）与
    `values-server1.yaml`（overlay）各自渲染后 `suspend=false` 的那批。
    这一路回答「**下一次 apply 之后会起不来的**」，也就是切换前置检查。
 
 R1 缺失（FAIL）：某键在站点 S 的必需集里，而 S 上没有这个 secret/键。
-   旧版把「两站点都必须有」当判据，于是 `flk-embed-credentials`（只有 xinru 的
+   旧版把「两站点都必须有」当判据，于是 `flk-embed-credentials`（只有 the db host 的
    `flk-law-embed` 在用、server1 侧 embed 挂起）被报成红 —— 那是在要求一份
    **永远不会被读**的凭据。现在它在 server1 不在必需集里，自然不判；而一旦有人把
    embed 在 server1 点亮，必需集立刻包含它、闸立刻红 —— 这正是切换前必须知道的事。
@@ -44,7 +44,7 @@ R5 判不出（EXIT 2）：集群读不到、渲染失败、某站点必需集�
 用法
 ----
     python3 scripts/verify-site-secret-parity.py                      # master vs server1
-    python3 scripts/verify-site-secret-parity.py --from xinru --to xinru-server1
+    python3 scripts/verify-site-secret-parity.py --from the db host --to the server
     python3 scripts/verify-site-secret-parity.py --live-only          # 不渲染，只看线上
     python3 scripts/verify-site-secret-parity.py --self-test
 
@@ -64,12 +64,12 @@ from pathlib import Path
 CHART = Path(__file__).resolve().parent.parent
 NS = "scraw"
 
-#: 站点 → (渲染用的 values 文件, make 目标)。base 是 xinru-master 的收敛态，
+#: 站点 → (渲染用的 values 文件, make 目标)。base 是 the master 的收敛态，
 #: overlay 只覆写 suspend。目标名固定，因为闸要用**同一套** helm 参数（Makefile
 #: 里有带外私有值的占位兜底），自己拼参数会在两台机器上渲出不同结果。
 SITE_VALUES = {
-    "xinru": ("values.yaml", "render-base"),
-    "xinru-server1": ("values-server1.yaml", "render"),
+    "the db host": ("values.yaml", "render-base"),
+    "the server": ("values-server1.yaml", "render"),
 }
 
 #: R2 的例外：同一键两站点都必需、取值不同，但已查明差异本身不是缺陷。
@@ -81,7 +81,7 @@ SITE_VALUES = {
 #: 仓库变成标识清单。
 KNOWN_DIVERGENCE = {
     ("legal-identity-", "crawl_proxy_url"): (
-        "同一 proxy id（两站点 id 值相同）的两个不同出口：xinru 出 <site-exit-ip>、"
+        "同一 proxy id（两站点 id 值相同）的两个不同出口：the db host 出 <site-exit-ip>、"
         "server1 出 111.230.147.208，两侧实测 200 / 各约 0.4s ⇒ 不是「一份拷贝过期」，"
         "是两个都活着的站点本地出口。该源当前两站点都挂起、broker 只回 /health。"
         "**解除条件**：当它所属的源在某一站点成为唯一执行者（另一站点 broker 置 0 副本，"
@@ -265,26 +265,26 @@ def compare(required: dict[str, set], secrets: dict[str, dict],
 def self_test() -> int:
     refs = {("s1", "k1"), ("s1", "k2"), ("s2", "*")}
     same = {"s1": {"k1": ("aaa", 8), "k2": ("bbb", 8)}, "s2": {"x": ("z", 1)}}
-    both = {"xinru": set(refs), "xinru-server1": set(refs)}
-    only_a = {"xinru": set(refs), "xinru-server1": {("s1", "k1")}}
+    both = {"the db host": set(refs), "the server": set(refs)}
+    only_a = {"the db host": set(refs), "the server": {("s1", "k1")}}
     cases = [
-        ("绿：全部同值", both, {"xinru": same, "xinru-server1": same}, None),
+        ("绿：全部同值", both, {"the db host": same, "the server": same}, None),
         ("R2 红：两边都必需且不同",
-         both, {"xinru": same,
-                "xinru-server1": {"s1": {"k1": ("aaa", 8), "k2": ("ccc", 8)},
+         both, {"the db host": same,
+                "the server": {"s1": {"k1": ("aaa", 8), "k2": ("ccc", 8)},
                                   "s2": {"x": ("z", 1)}}}, "R2"),
         ("绿：只在一边必需、取值不同不判红（embed 形态）",
-         only_a, {"xinru": same,
-                  "xinru-server1": {"s1": {"k1": ("aaa", 8)}, "s2": {"x": ("z", 1)}}}, None),
+         only_a, {"the db host": same,
+                  "the server": {"s1": {"k1": ("aaa", 8)}, "s2": {"x": ("z", 1)}}}, None),
         ("R1 红：目标站点缺必需键",
-         both, {"xinru": same, "xinru-server1": {"s2": {"x": ("z", 1)}}}, "R1"),
+         both, {"the db host": same, "the server": {"s2": {"x": ("z", 1)}}}, "R1"),
         ("R1 红：目标站点缺整份 secret（envFrom）",
-         both, {"xinru": same,
-                "xinru-server1": {"s1": {"k1": ("aaa", 8), "k2": ("bbb", 8)}}}, "R1"),
+         both, {"the db host": same,
+                "the server": {"s1": {"k1": ("aaa", 8), "k2": ("bbb", 8)}}}, "R1"),
     ]
     bad = 0
     for name, req, sec, expect in cases:
-        problems, _, _ = compare(req, sec, "xinru", "xinru-server1")
+        problems, _, _ = compare(req, sec, "the db host", "the server")
         hit = [p for p in problems if p.startswith(expect)] if expect else problems
         if expect and not hit:
             print(f"✗ {name}: 期望 {expect}，实际 {problems or '无'}")
@@ -295,7 +295,7 @@ def self_test() -> int:
         else:
             print(f"✓ {name}")
     try:
-        compare({"xinru": set(), "xinru-server1": set()}, {}, "xinru", "xinru-server1")
+        compare({"the db host": set(), "the server": set()}, {}, "the db host", "the server")
         print("✗ 判不出：必需集为空却退 0")
         bad += 1
     except Unjudgeable:
@@ -307,8 +307,8 @@ def self_test() -> int:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--from", dest="src", default="xinru")
-    ap.add_argument("--to", dest="dst", default="xinru-server1")
+    ap.add_argument("--from", dest="src", default="the db host")
+    ap.add_argument("--to", dest="dst", default="the server")
     ap.add_argument("--live-only", action="store_true", help="不渲染，只看线上在跑的对象")
     ap.add_argument("--self-test", action="store_true")
     args = ap.parse_args()

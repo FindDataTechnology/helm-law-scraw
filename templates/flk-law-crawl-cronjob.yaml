@@ -1,5 +1,5 @@
 {{- /*
-IN-SERVICE CronJob (suspend=false): xinru live truth, zero behavior change.
+IN-SERVICE CronJob (suspend=false): the db host live truth, zero behavior change.
 2026-10-14: migrated off the retired Harbor (decommissioned 2026-10-11 — the
 job only survived on node image cache) onto ccr via images.flkLawCrawl, which
 now tracks the same anchored tag as the legal-sources line. No pull secret:

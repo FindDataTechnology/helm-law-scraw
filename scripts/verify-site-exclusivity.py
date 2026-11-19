@@ -4,13 +4,13 @@
 抓的是什么
 ----------
 本 chart 用「base + 站点 overlay」表达「谁跑这条线」：
-`values.yaml` 是 base（APPLY-NOTES 记为与 xinru-master 线上收敛），
+`values.yaml` 是 base（APPLY-NOTES 记为与 the master 线上收敛），
 `values-<site>.yaml` 只覆写各源的 `suspend`。于是同一个源到底谁在跑，
 由**两个文件各说一遍**——而没有任何东西比过这两句话。
 
 2026-11-14 实历：`values-server1.yaml` 把 mfa-treaty / gov-rules /
 party-regulation / ccdi 四个爬虫 + 五个 loader + report + flkLawCrawl 全写成
-`suspend: false`，而同一时刻 xinru-master 上这四只爬虫**正在跑**（且是当前镜像）。
+`suspend: false`，而同一时刻 the master 上这四只爬虫**正在跑**（且是当前镜像）。
 两侧同时在跑的证据不是清单，是数据：2026-11-13 那一轮 `crawl_runs` 里
 四个源各写了两行、`image_tag` 不同（`sha-e584fc5` / `sha-b63d0d1`）——
 一行的执行者 = master 的 CronJob，另一行 = server1 的 CronJob。
@@ -487,8 +487,8 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--dir", default=str(Path(__file__).resolve().parent.parent),
                     help="chart 目录（默认本脚本的父目录）")
-    ap.add_argument("--base-site", default="xinru-master",
-                    help="values.yaml 对应的站点名（默认 xinru-master，见 APPLY-NOTES.md）")
+    ap.add_argument("--base-site", default="the master",
+                    help="values.yaml 对应的站点名（默认 the master，见 APPLY-NOTES.md）")
     ap.add_argument("--self-test", action="store_true")
     args = ap.parse_args()
     if args.self_test:

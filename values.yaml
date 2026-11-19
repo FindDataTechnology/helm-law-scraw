@@ -1,11 +1,11 @@
 # helm-law-scraw values
 #
-# Converged to the xinru cluster (k3s, namespace scraw) live inventory as of
+# Converged to the the db host cluster (k3s, namespace scraw) live inventory as of
 # 2026-10-06. Chart-owned live objects: flk-law-crawl CronJob, legal-auth-broker
 # Deployment+Service, the 5 wave-1 legal-source crawl CronJobs, flk-law-backfill,
 # the 5 per-source load CronJobs and legal-sources-report. scrapyd,
 # scraw-law-contracts, wenshu-crawl, redis and postgresql are DISABLED here
-# (nothing live on xinru); flip their enabled flags only for a cluster that has
+# (nothing live on the db host); flip their enabled flags only for a cluster that has
 # them. See APPLY-NOTES.md for the standard render command and wave flips.
 #
 # Image reference pattern: <registry>/<repository>:<tag>. Each images.* entry
@@ -30,7 +30,7 @@ fullnameOverride: ""
 
 images:
   # Every entry supports its own `registry` override; when set it wins over the
-  # legacy top-level `registry`. The xinru live truth (2026-10-06) is:
+  # legacy top-level `registry`. The the db host live truth (2026-10-06) is:
   #   - in-change legal-sources objects run images from ccr.ccs.tencentyun.com
   #     (nodes carry ccr credentials; NO imagePullSecrets on these pods)
   #   - the in-service flk chain keeps its registry-mirror images from the retired
@@ -71,7 +71,7 @@ images:
     repository: lawcraw-business/legal-auth-broker
     tag: sha-c33bf67
     pullPolicy: IfNotPresent
-  # --- legacy components, disabled on xinru (nothing live) ---
+  # --- legacy components, disabled on the db host (nothing live) ---
   scrapyd:
     # Full image path WITHOUT the registry prefix (top-level registry is prepended).
     repository: scraw-ops-scrapyd
@@ -92,7 +92,7 @@ images:
     pullPolicy: IfNotPresent
 
 scrapyd:
-  # Disabled on xinru: no scrapyd Deployment/Service/ConfigMap exists in the
+  # Disabled on the db host: no scrapyd Deployment/Service/ConfigMap exists in the
   # live cluster (2026-10-06). Leave false so a chart apply cannot create one.
   enabled: false
   replicas: 1
@@ -103,7 +103,7 @@ scrapyd:
     dbsToKeep: "5"
 
 lawContracts:
-  # Disabled on xinru: no law-contracts CronJob/PVC exists in the live cluster.
+  # Disabled on the db host: no law-contracts CronJob/PVC exists in the live cluster.
   enabled: false
   spider: samr_contracts
   schedule: "0 2 * * *"     # daily 02:00
@@ -136,7 +136,7 @@ minio:
 # `laws` bucket `incremental/` prefix. Crawler holds NO PG credentials — the
 # loader (flk-load.mjs) runs separately on the data machine. rustfs credentials
 # are placeholders; supply real values via local-only values, never committed.
-# IN-SERVICE on xinru (suspend=false): every field here matches the live
+# IN-SERVICE on the db host (suspend=false): every field here matches the live
 # CronJob verbatim; change only in lockstep with the cluster.
 flkLawCrawl:
   schedule: "30 2 * * *"    # daily 02:30; == live
@@ -203,7 +203,7 @@ flkLawEmbed:
     region: us-east-1
 
 # --- wave-1 authoritative legal sources (fd-law-data) ---
-# Converged to the xinru live inventory (2026-10-06):
+# Converged to the the db host live inventory (2026-10-06):
 #   sources  = 5 wave-1 crawl CronJobs + flk-law-backfill (names = bare keys,
 #              no release prefix)
 #   loaders  = the 5 per-source load CronJobs (09-24 manual apply, now charted)
@@ -222,9 +222,9 @@ flkLawEmbed:
 #
 # Image channel (never Jenkins→Harbor; Harbor retired 2026-10-11):
 #   push → GitHub Actions image.yml → hkccr.ccs.tencentyun.com/lawcraw-business
-#   → cheap-3 tcr-relay (cron */5) → ccr.ccs.tencentyun.com/lawcraw-business
+#   → the node tcr-relay (cron */5) → ccr.ccs.tencentyun.com/lawcraw-business
 # Warm with `crictl pull` before rolling — the relay can lag Actions by minutes.
-# If Actions is billing-blocked, delta-build on xinru-server2 (see fd-law-data
+# If Actions is billing-blocked, delta-build on the server (see fd-law-data
 # README).
 #
 # 巡检: legal-sources-report writes laws/legal-sources/report/report-YYYYMMDD.json
@@ -356,7 +356,7 @@ legalSources:
     party-regulation-library:
       name: party-regulation-crawl
       schedule: "40 3 * * *"
-      # 2026-11-14 切换试点：本源的执行者迁到 xinru-server1（裁定见 APPLY-NOTES
+      # 2026-11-14 切换试点：本源的执行者迁到 the server（裁定见 APPLY-NOTES
       # 「宿主切换」）。两侧必须同一次改动里翻，只翻一侧＝两个执行者写同一张
       # crawl_runs。`make verify-sites` 拒「两边都活」。
       suspend: true
@@ -522,7 +522,7 @@ legalSources:
 # are stored in this chart.
 authBroker:
   enabled: true
-  # Live object name on xinru is `legal-auth-broker` (no release prefix); the
+  # Live object name on the db host is `legal-auth-broker` (no release prefix); the
   # crawlers reach it at http://legal-auth-broker.scraw.
   name: legal-auth-broker
   replicas: 1
@@ -564,7 +564,7 @@ authBroker:
 # browser on the operator Mac; see fd-law-data/README "wenshu". Flipping this to
 # false requires sticky egress (design.md D6) plus a resumed account.
 wenshuCrawl:
-  # Disabled on xinru: no wenshu-crawl CronJob exists in the live cluster (the
+  # Disabled on the db host: no wenshu-crawl CronJob exists in the live cluster (the
   # supported shape is the warm browser on the operator Mac; see README).
   enabled: false
   schedule: "0 17 * * *"        # 01:00 Asia/Shanghai (nodes run UTC)
@@ -594,7 +594,7 @@ private:
 
 # Bitnami subcharts
 redis:
-  # Disabled on xinru: no redis StatefulSet/Service exists in the live cluster.
+  # Disabled on the db host: no redis StatefulSet/Service exists in the live cluster.
   enabled: false
   architecture: standalone
   # Auth is disabled by default because the chart's Redis URL has no password.
@@ -603,7 +603,7 @@ redis:
     enabled: false
 
 postgresql:
-  # Disabled on xinru: PG lives off-cluster（主机见 values-private.yaml，凭据在
+  # Disabled on the db host: PG lives off-cluster（主机见 values-private.yaml，凭据在
   # flk-law-pg-credentials）; no in-chart postgresql exists in the live cluster.
   enabled: false
   auth:

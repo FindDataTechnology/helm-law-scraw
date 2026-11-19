@@ -19,8 +19,8 @@
 
 判据
 ----
-对每个站点用该站点自己的 values 渲染（`xinru` → `make render-base`，
-`xinru-server1` → `make render`），**把渲染产物经
+对每个站点用该站点自己的 values 渲染（`the db host` → `make render-base`，
+`the server` → `make render`），**把渲染产物经
 `kubectl create --dry-run=client -o json -f -` 转成真正的 JSON**（不靠自己解 YAML：
 本机 homebrew python 没有 PyYAML，而 `/usr/bin/python3` 有——gate 不能依赖解释器
 口味），再与集群同名对象逐字段比：
@@ -45,7 +45,7 @@ R4 判不出（EXIT 2）：渲染失败、kubectl 读不到、某一侧 0 个可
 用法
 ----
     python3 scripts/verify-live-drift.py                  # 两个站点都查
-    python3 scripts/verify-live-drift.py --site xinru
+    python3 scripts/verify-live-drift.py --site the db host
     python3 scripts/verify-live-drift.py --self-test
 
 退出码：0 无 R1 命中（含 R2/R3 事实行）；1 有漂移；2 判不出。
@@ -60,7 +60,7 @@ from pathlib import Path
 
 CHART = Path(__file__).resolve().parent.parent
 NS = "scraw"
-SITES = {"xinru": "render-base", "xinru-server1": "render"}
+SITES = {"the db host": "render-base", "the server": "render"}
 FIELDS = ("image", "command", "args", "env", "resources", "suspend", "schedule",
           "backoffLimit", "activeDeadlineSeconds")
 KINDS = ("CronJob", "Deployment", "StatefulSet")

@@ -1,6 +1,6 @@
 {{- /*
 One CronJob per entry under legalSources.sources. Object names are the bare
-source keys (rmfyalk-case-crawl, ..., flk-law-backfill) to match the xinru
+source keys (rmfyalk-case-crawl, ..., flk-law-backfill) to match the the db host
 live inventory verbatim - NO release prefix. Images come from
 images.legalSources (ccr registry, pinned sha); per-source `image` overrides
 the repository/tag while keeping the registry (rmfyalk runs the auth-broker

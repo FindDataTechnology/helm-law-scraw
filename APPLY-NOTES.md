@@ -1,6 +1,6 @@
-# APPLY-NOTES — helm-law-scraw on xinru (converged 2026-10-06)
+# APPLY-NOTES — helm-law-scraw on the db host (converged 2026-10-06)
 
-This chart is converged to the xinru cluster (`xinru-master`, <site-exit-ip>,
+This chart is converged to the the db host cluster (`the master`, <site-exit-ip>,
 namespace `scraw`) live inventory. **Standard apply command (when a wave is
 approved):**
 
@@ -53,10 +53,10 @@ values 段（`flkLaw`-侧与 `flkLawEmbed`），`make render` 明确渲染它们
 `suspend`）。按旧清单办事的人会以为「这两个对象不归 chart 管」，于是手工改线上、
 或以为改 values 没用。判据：以 `make render` 的对象名为准，别信这段文字。
 
-**Disabled by default** (nothing live on xinru, verified cluster-wide
+**Disabled by default** (nothing live on the db host, verified cluster-wide
 2026-10-06): `scrapyd.enabled`, `lawContracts.enabled`, `wenshuCrawl.enabled`,
 `redis.enabled`, `postgresql.enabled`. An apply with default values cannot
-create them. Do not flip these on xinru.
+create them. Do not flip these on the db host.
 
 ## Naming rule
 
@@ -69,7 +69,7 @@ name. `values.yaml nameOverride/fullnameOverride` are irrelevant now.
 
 同一个 CronJob 不许在两个站点同时点亮。这条闸是 2026-11-14 用数据换来的：
 `values-server1.yaml` 曾把四个爬虫 + 五个 loader + report + flkLawCrawl 写成
-`suspend: false`，而 `values.yaml`（xinru-master，活宿主）上同样这几条**正在跑**。
+`suspend: false`，而 `values.yaml`（the master，活宿主）上同样这几条**正在跑**。
 两侧同时在跑的证据不在清单里，在 `crawl_runs`：2026-11-13 那一轮
 mfa-treaty / gov-rules / party-regulation / ccdi 各写了两行、`image_tag` 不同
 （master 自报 `sha-e584fc5`，server1 的 CronJob 跑 `sha-b63d0d1`）。
@@ -86,12 +86,12 @@ mfa-treaty / gov-rules / party-regulation / ccdi 各写了两行、`image_tag` �
 
 ## 宿主切换：已裁定，未执行（2026-11-14 查明）
 
-**裁定（2026-10-07，用户五机分布）**：法律线宿主 = **xinru-server1**，全家（CronJob +
+**裁定（2026-10-07，用户五机分布）**：法律线宿主 = **the server**，全家（CronJob +
 dispatcher + observer + auth-broker）驻扎于此。记录在
 `openspec/changes/archive/2026-10-12-legal-line-federation/`：proposal「法律线宿主=
-xinru-server1」、tasks 3.3「站点 dispatcher 部署于 xinru-server1」已勾。
+the server」、tasks 3.3「站点 dispatcher 部署于 the server」已勾。
 
-**实际（2026-11-14 实测）**：**xinru-master 仍在跑整条线**（16 个 CronJob、13 个
+**实际（2026-11-14 实测）**：**the master 仍在跑整条线**（16 个 CronJob、13 个
 `suspend=false`、镜像 `sha-c33bf67`），server1 侧 17 个法律 CronJob **全部 suspend**
 （镜像停在 `sha-b63d0d1`）。也就是说：**归档时没有人把 master 侧的 CronJob 关掉**，
 那份 change 的任务表里也没有这一条——迁移名义上完成，负载原地未动。
@@ -105,7 +105,7 @@ xinru-server1」、tasks 3.3「站点 dispatcher 部署于 xinru-server1」已�
 
 | 面 | 探针 | 结果 |
 |---|---|---|
-| 镜像 | `kubectl --context xinru-server1 -n scraw run pullprobe --rm -i --image=…:sha-c33bf67 -- node -e …` | 拉起并执行成功（server1 节点自带 ccr 认证，无需 pull secret） |
+| 镜像 | `kubectl --context the server -n scraw run pullprobe --rm -i --image=…:sha-c33bf67 -- node -e …` | 拉起并执行成功（server1 节点自带 ccr 认证，无需 pull secret） |
 | PG | 同镜像 Pod，`FD_CRAWL_DB_URL ← secret federation-db/url`，跑一次 `select current_database()` | `fd_open_data` 通，`crawl_runs` 可读（party-regulation 48 行） |
 | 对象存储 | `createS3({endpoint: <rustfs 内网端点，见 values-private.yaml>, …secret flk-law-crawl-credentials})` + `listObjects('laws', {prefix:'legal-sources/report/'})` | 通，列到 40 个报告对象 |
 
@@ -139,7 +139,7 @@ delete cronjob party-regulation-crawl`），别去 grep 宽匹配。
 | secret / key | 两站点 | 判定 |
 |---|---|---|
 | `flk-law-pg-credentials` / `pg-password` | `3515c8f6` 两侧同值（2026-11-14 对齐） | 曾是 load/report 的硬阻塞；对齐后 server1 上 `create job --from=cronjob/rmfyalk-case-load` 实测 **Complete 1/1、62s**、日志回 `laws: 32355 / law_chunks: 362476 / unchanged: true` |
-| `flk-embed-credentials` / `embed-api-key` | 只有 xinru 有 | **不是缺陷**：server1 侧 `flk-law-embed` 挂起、不在必需集里。谁要在 server1 点亮 embed，必需集立刻包含它、闸立刻红 |
+| `flk-embed-credentials` / `embed-api-key` | 只有 the db host 有 | **不是缺陷**：server1 侧 `flk-law-embed` 挂起、不在必需集里。谁要在 server1 点亮 embed，必需集立刻包含它、闸立刻红 |
 | `legal-identity-<法务账号>`（全名见集群 Secret）/ `crawl_proxy_url`、`login_proxy_url` | 两侧不同（54B vs 49B，**proxy id 相同**） | 已裁决（R3，带解除条件）：同一身份的两个活着的站点本地出口，见下文 |
 | `federation-db`/`url`、`flk-law-crawl-credentials` 两个 dashed 键、`legal-auth-broker` 三键 | 两侧同值 | crawl/load/report 都可搬 |
 
@@ -151,7 +151,7 @@ delete cronjob party-regulation-crawl`），别去 grep 宽匹配。
 会不会起不来」。R2 只在**两站点都必需**时才要求同值。
 
 **proxy 那条为什么判成「已裁决」而不是对齐**：同一个 proxy id（两站点 id 值逐字节相同），
-两个 URL 实测都活着、出口 IP 不同——xinru 出 `<site-exit-ip>`，server1 出
+两个 URL 实测都活着、出口 IP 不同——the db host 出 `<site-exit-ip>`，server1 出
 `111.230.147.208`（异地备份机）。所以不是「一份拷贝过期」，而是两个站点各自的本地方案。
 按 `legal-line-federation` 的裁定（宿主 = server1）迁移完成后，另一站点 broker 应置 0 副本、
 两侧收敛到留用站点的值——**这就是该条在脚本里的解除条件**。
@@ -169,8 +169,8 @@ delete cronjob party-regulation-crawl`），别去 grep 宽匹配。
 
 | 源 | 生效站点 | 依据 |
 |---|---|---|
-| `party-regulation-crawl` | **xinru-server1**（2026-11-14 试点） | master 侧 `suspend: true`、server1 侧 `false`；真爬已在 server1 实测（Job Complete 17s、`crawl_runs` 自报 `sha-c33bf67`、日志可见）。观察一个 03:40 轮次 |
-| 其余 6 crawl + 5 load + embed + report + flkLawCrawl | **xinru-master**（唯一执行者） | 2026-11-14 实测两集群 `suspend` 全表：master 亮 13 个、server1 只亮 `party-regulation-crawl`（另有 `fd-industry-dispatcher` 与 `federation-observer` 两条站点级作业）|
+| `party-regulation-crawl` | **the server**（2026-11-14 试点） | master 侧 `suspend: true`、server1 侧 `false`；真爬已在 server1 实测（Job Complete 17s、`crawl_runs` 自报 `sha-c33bf67`、日志可见）。观察一个 03:40 轮次 |
+| 其余 6 crawl + 5 load + embed + report + flkLawCrawl | **the master**（唯一执行者） | 2026-11-14 实测两集群 `suspend` 全表：master 亮 13 个、server1 只亮 `party-regulation-crawl`（另有 `fd-industry-dispatcher` 与 `federation-observer` 两条站点级作业）|
 
 **2026-11-14 之前，其中 4 个爬虫 + 若干 loader 在两侧同时是活的**——这也是
 `crawl_runs` 里 11-10/11-11/11-13 三轮各出现同窗两行的原因（11-13 那轮
@@ -181,7 +181,7 @@ delete cronjob party-regulation-crawl`），别去 grep 宽匹配。
 
 回滚这一源＝两处翻回去并重推：`values.yaml` 的 `party-regulation-library.suspend`
 改回 `false`、`values-server1.yaml` 的同项改回 `true`，然后
-`kubectl --context xinru -n scraw patch cronjob party-regulation-crawl --type=merge
+`kubectl --context the db host -n scraw patch cronjob party-regulation-crawl --type=merge
 -p '{"spec":{"suspend":false}}'` 与 server1 侧对称 patch。**load 不动**：它读的是
 同一个 `laws` 桶、写同一个库，与 crawl 在哪台机无关。
 
@@ -197,12 +197,12 @@ git commit && git push
 # 2) 目标站点先应用（server1），核一次真跑
 helm template law-craw . -n scraw -f values-server1.yaml -f values-private.yaml \
   | sudo k3s kubectl apply -n scraw -f -         # 在 server1 上执行
-kubectl --context xinru-server1 -n scraw create job --from=cronjob/mfa-treaty-crawl \
-  mfa-treaty-crawl-cutover && kubectl --context xinru-server1 -n scraw logs -f job/mfa-treaty-crawl-cutover
+kubectl --context the server -n scraw create job --from=cronjob/mfa-treaty-crawl \
+  mfa-treaty-crawl-cutover && kubectl --context the server -n scraw logs -f job/mfa-treaty-crawl-cutover
 #   验收：镜像 tag 与 make render 一致、crawl_runs 新行 image_tag 正确、laws 有新对象
 
 # 3) 再关旧站点（master），核它真的不再写
-kubectl --context xinru -n scraw patch cronjob mfa-treaty-crawl --type=merge -p '{"spec":{"suspend":true}}'
+kubectl --context the db host -n scraw patch cronjob mfa-treaty-crawl --type=merge -p '{"spec":{"suspend":true}}'
 #   验收：次日该源只有 server1 那一行（crawl_runs 里 source+minute 唯一）
 
 # 回滚：把 1) 的两处翻回去并重推；两个站点都回到「只有 master 亮」
@@ -330,7 +330,7 @@ RustFS 桶（`lib/auth-broker/s3-session-store.js`），不是本地卷；两侧
 
 ```bash
 # 行数据由一次性查询 Pod 产出（scripts/single-executor-runs.mjs 头注有完整配方）
-kubectl --context xinru -n scraw logs runs | tail -1 > /tmp/rows.json
+kubectl --context the db host -n scraw logs runs | tail -1 > /tmp/rows.json
 make verify-runs ROWS=/tmp/rows.json SINCE=2026-11-14T05:00:00Z   # EXIT 1 双跑 / 2 判不出
 ```
 
@@ -387,7 +387,7 @@ run manifest／`state.json`／`last_fetched_at` 三者最大值，所以 crawl �
   「拿 `pg_get_viewdef` 逐字比必然假红」：比性质，不比字面）。
 - **`image_tag` 不是站点身份**：11-12 那轮两个执行者都跑 `sha-30f5179`，库里两行一模一样；
   今天两站已对齐同片，这条限制更硬。判双执行者只能靠「同窗两条 success」。
-  顺带一条结构事实：`crawl_sources.site` 对**全部** federated 源都写着 `xinru-server1`，
+  顺带一条结构事实：`crawl_sources.site` 对**全部** federated 源都写着 `the server`，
   但除 `rmfyalk-case-crawl`（平台派发，`schedule 10 3 * * *` / `schedule_tz Asia/Shanghai`）
   之外 `schedule` 都是 null —— 那个 `site` 是**目的地声明**，不是「谁真的跑了」。
   这也是 `crawl_runs` 该补 `site` 列的理由。
@@ -409,7 +409,7 @@ backoffLimit / activeDeadlineSeconds`。
 
 ```bash
 make verify-live                      # 两个站点都查；EXIT 1 有漂移 / 2 判不出
-python3 scripts/verify-live-drift.py --site xinru
+python3 scripts/verify-live-drift.py --site the db host
 python3 scripts/verify-live-drift.py --self-test   # 8 条自证（含「args 少一段」）
 ```
 
@@ -427,7 +427,7 @@ python3 scripts/verify-live-drift.py --self-test   # 8 条自证（含「args �
 
 它一上线就抓到一处：server1 线上的 `LEGAL_PAUSED_SOURCES` 仍把
 `party-regulation-library` 算进暂停名单（那源在 server1 是亮的），补一次
-`make render | kubectl --context xinru-server1 apply -n scraw -f -` 后两侧都逐字段一致。
+`make render | kubectl --context the server apply -n scraw -f -` 后两侧都逐字段一致。
 
 第二处是**闸自己**的问题，值得单记：把 `LEGAL_PAUSED_SOURCES` 清空时，render 出
 `value: ""`，而 API server 读回来是 `{"name": "LEGAL_PAUSED_SOURCES"}` ——
@@ -451,7 +451,7 @@ N 代前的代码」，而不是宕机。
 ```bash
 # 1) 行数据由一次性查询 Pod 产出（本机没有 psql，也不该把 DSN 摊在命令行）
 #    同族用法见记忆「查询 Pod 模式」；脚本只要 [{source,img}]
-kubectl --context xinru -n scraw logs runs | tail -1 > /tmp/rows.json
+kubectl --context the db host -n scraw logs runs | tail -1 > /tmp/rows.json
 # 2) 比对
 make verify-pins ROWS=/tmp/rows.json      # EXIT 1 = 分叉，2 = 判不出
 ```
@@ -534,15 +534,15 @@ helm template law-craw . --namespace scraw -f values-private.yaml \
   postgresql objects (disabled), nor any external object (names verified).
 
 
-## 法律线宿主：xinru（2026-11-14 更正；此前写的是 xinru-server1）
+## 法律线宿主：the db host（2026-11-14 更正；此前写的是 the server）
 
-**现状**：法务线唯一在跑的宿主是 **`xinru` 集群 `scraw` ns**（14 个点亮作业，镜像
-`sha-492925f`）。`xinru-server1` 上的同名作业已全部 `suspend=true`，只保留
+**现状**：法务线唯一在跑的宿主是 **`the db host` 集群 `scraw` ns**（14 个点亮作业，镜像
+`sha-492925f`）。`the server` 上的同名作业已全部 `suspend=true`，只保留
 `fd-industry-dispatcher`（该集群独有）与 `federation-observer`（按**本集群** scraw 的
 Job 回填 `crawl_runs`，`FED_NAMESPACE=scraw`，两边看的是不同 Job 集合，不是重复）。
 
-**为什么要更正**：本节原来写「宿主 xinru-server1（2026-10-07 迁移后）」，但 2026-10-06
-之后所有出片与修复都落在 xinru，server1 那套一路停在 `sha-b63d0d1`——于是**两边同时
+**为什么要更正**：本节原来写「宿主 the server（2026-10-07 迁移后）」，但 2026-10-06
+之后所有出片与修复都落在 the db host，server1 那套一路停在 `sha-b63d0d1`——于是**两边同时
 按 CST 窗口点火**：同一 source 同一分钟在 `crawl_runs` 留两行、爬取请求翻倍，
 而 server1 那侧还缺 2026-11-13 修的 `lib/http.js` 半开响应体超时（就是那批「进程睡死
 8 小时、零日志零重试」的成因）。2026-11-14 实测两边 lastScheduleTime 全部对得上当日窗口，
@@ -551,7 +551,7 @@ Job 回填 `crawl_runs`，`FED_NAMESPACE=scraw`，两边看的是不同 Job 集�
 **回滚**（若决定改回 server1）：先在 server1 把 11 个作业 `suspend` 改回 false——
 `ccdi-supervisory-{crawl,load}`、`flk-law-crawl`、`gov-rules-{crawl,load}`、
 `legal-sources-report`、`mfa-treaty-{crawl,load}`、`party-regulation-{crawl,load}`、
-`rmfyalk-case-load`——再去 xinru 对应挂起，**任何时刻只留一侧点亮**。
+`rmfyalk-case-load`——再去 the db host 对应挂起，**任何时刻只留一侧点亮**。
 
 **渲染**：`helm template law-craw . --namespace scraw -f values-server1.yaml -f values-private.yaml`
 （或 `make render`；**两个 -f 都要** —— 内网端点与账号标识在带外那份里）
@@ -591,7 +591,7 @@ Job 回填 `crawl_runs`，`FED_NAMESPACE=scraw`，两边看的是不同 Job 集�
 | `backoffLimit` 缺省（6） | `legal-sources-report` | chart 写 0 并配 `restartPolicy: Never`，理由写在模板里：重试三条一簇、间隔 12–102 秒，会把真信号稀释 |
 | report `args` 缺 `load_stalled` recorder | `legal-sources-report` | **这是真缺口**：`make verify-report` 只验渲染，于是它一直在绿的断言「报告把 load_stalled 写进 crawl_runs」**线上根本没有** |
 
-所以按 `make render-base | kubectl --context xinru apply -n scraw -f -` 收敛了 master，
+所以按 `make render-base | kubectl --context the db host apply -n scraw -f -` 收敛了 master，
 并把「只比镜像/suspend」升级成**逐字段比**（`image`/`env`/`resources`/`args`/`command`/
 `suspend`/`schedule`/`backoffLimit`）。两条判据纪律：
 
@@ -613,7 +613,7 @@ Job 回填 `crawl_runs`，`FED_NAMESPACE=scraw`，两边看的是不同 Job 集�
 `guide-cases-crawl` / `guide-cases-load`（10-06 建、一直挂起、零 Job 历史、`guide-cases-*`
 是 chart 不渲染的无主源，留着不动）。
 
-处置：`make render | kubectl --context xinru-server1 apply -n scraw -f -`（渲染产物
+处置：`make render | kubectl --context the server apply -n scraw -f -`（渲染产物
 **不带 namespace**，漏 `-n scraw` 会建出 `default/…`）。复核方式不是看 apply 的
 `configured` 字样，而是**逐对象比 render 与 live 的镜像和 suspend**：
 
@@ -835,7 +835,7 @@ success」，不看 `rows_written`，不会把 0 行判红。
 
 **站建出来了但 VNC 打不开时，先看 init 容器日志**（2026-11-14 实历）：
 `kubectl -n fd-mcp logs <station-pod> -c checkout` —— 当晚是 gitee 令牌在
-`tencent/fd-industry` 那份更新了、`xinru/fd-mcp` 这份没更新（克隆报
+`tencent/fd-industry` 那份更新了、`the db host/fd-mcp` 这份没更新（克隆报
 `Incorrect username or password (access token)`），而站行状态照旧写着
 `waiting_operator`、面板日志照旧写 `station #NN launched`。修法与核对配方见
 `~/.zcode/.../memory/connectivity-proves-network-not-credential-parity.md`。

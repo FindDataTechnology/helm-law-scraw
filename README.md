@@ -1,5 +1,7 @@
 # helm-law-scraw
 
+> **Part of the [Lex line (寻数·识律)](https://www.finddatatech.cloud/products/lex) of [FindData](https://www.finddatatech.cloud)** — the Helm chart for the legal crawl stack: source crawlers, auth broker and the schedule/concurrency shape they run under.
+
 Helm chart for the **scraw law-crawling stack**: deploys `scrapyd` (shared crawl
 service), the `scraw-law-contracts` runner (SAMR contract templates crawler as a
 CronJob), the `flk-law-crawl` runner (flk.npc.gov.cn regulation incremental
@@ -333,15 +335,15 @@ make verify-deps     # 逐对校验 charts/<name>-<version>.tgz，并揪出未�
 D=$(date +%Y%m%d-%H%M%S)
 mkdir -p ~/law-rollback/$D
 for cj in legal-sources-report ccdi-supervisory-load gov-rules-load mfa-treaty-load party-regulation-load rmfyalk-case-load; do
-  kubectl -n scraw --context xinru get cronjob "$cj" -o yaml > ~/law-rollback/$D/cj-$cj.yaml
+  kubectl -n scraw --context the db host get cronjob "$cj" -o yaml > ~/law-rollback/$D/cj-$cj.yaml
 done
-kubectl -n scraw --context xinru get secret legal-identity-rmfyalk-<账号标识> -o yaml > ~/law-rollback/$D/secret-identity.yaml
+kubectl -n scraw --context the db host get secret legal-identity-rmfyalk-<账号标识> -o yaml > ~/law-rollback/$D/secret-identity.yaml
 echo "备份目录: ~/law-rollback/$D"
 ```
 
 > `<账号标识>` 的真实值不进 git，取自带外 `values-private.yaml` 的
 > `private.accountId`；不知道是哪个时用
-> `kubectl -n scraw --context xinru get secret | grep legal-identity-rmfyalk-` 直接列出来。
+> `kubectl -n scraw --context the db host get secret | grep legal-identity-rmfyalk-` 直接列出来。
 
 ### 1. 裁决 A：保持私有（当前默认）
 
@@ -374,13 +376,13 @@ echo "备份目录: ~/law-rollback/$D"
    都起来的那一轮留痕，所以「最近一轮没有两行」证明不了没事。）
 4. 验证：
    ```bash
-   kubectl -n scraw --context xinru rollout status deploy/legal-auth-broker
+   kubectl -n scraw --context the db host rollout status deploy/legal-auth-broker
    # 报告里应开始出现 load_stalled 判据（无停滞时该字段为空，行为与旧版一致）
-   DSN=$(kubectl -n scraw --context xinru get secret federation-db -o jsonpath='{.data.url}' | base64 -d)
+   DSN=$(kubectl -n scraw --context the db host get secret federation-db -o jsonpath='{.data.url}' | base64 -d)
    psql "$DSN" -c "select id,status,left(coalesce(error_head,''),80) from crawl_runs where source='legal-sources-report' order by id desc limit 3;"
    ```
 5. **回滚**：把 `values.yaml` 的两个 tag 改回 `sha-b63d0d1` / `sha-b726e1f`，
-   重新 `helm template … | kubectl apply`，再 `kubectl -n scraw --context xinru rollout undo deploy/legal-auth-broker`。
+   重新 `helm template … | kubectl apply`，再 `kubectl -n scraw --context the db host rollout undo deploy/legal-auth-broker`。
    数据侧不回滚（新镜像只会多报，不会改写既有行）。
 
 ### 4. 与该裁决无关、但仍挂着的人工项
@@ -391,6 +393,6 @@ echo "备份目录: ~/law-rollback/$D"
 - 五个 load CronJob 目前已是 `suspend: false`（按 chart 声明归位）。若需回退：
   ```bash
   for cj in ccdi-supervisory-load gov-rules-load mfa-treaty-load party-regulation-load rmfyalk-case-load; do
-    kubectl -n scraw --context xinru patch cronjob "$cj" --type merge -p '{"spec":{"suspend":true}}'
+    kubectl -n scraw --context the db host patch cronjob "$cj" --type merge -p '{"spec":{"suspend":true}}'
   done
   ```

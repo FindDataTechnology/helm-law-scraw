@@ -1,6 +1,6 @@
 {{- /*
 The 5 per-source load CronJobs (rmfyalk-case-load, ..., ccdi-supervisory-load)
-and the legal-sources-report CronJob. Charted 2026-10-06 from the xinru live
+and the legal-sources-report CronJob. Charted 2026-10-06 from the the db host live
 inventory (09-24 manual applies). Names are the bare keys - NO release prefix.
 Loaders/readers run images.legalSources (ccr registry, pinned sha); no
 imagePullSecrets (nodes carry ccr credentials). Each gets the RustFS env plus

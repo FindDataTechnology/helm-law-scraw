@@ -1,8 +1,8 @@
-# xinru-server1 安装 overlay — 法律线宿主（change legal-line-federation，用户裁定五机分布）
+# the server 安装 overlay — 法律线宿主（change legal-line-federation，用户裁定五机分布）
 # server1 节点已有 ccr 认证（registries.yaml）→ 无需 imageCredentials
 #
 # ⚠ 2026-11-14：这份 overlay 一度把四个爬虫 + 五个 loader + report + flkLawCrawl
-# 都写成 suspend: false，而 xinru-master（values.yaml）上同样这几条**正在跑**。
+# 都写成 suspend: false，而 the master（values.yaml）上同样这几条**正在跑**。
 # 两侧同时在跑的证据不是清单而是数据：2026-11-13 那一轮 crawl_runs 里
 # mfa-treaty / gov-rules / party-regulation / ccdi 各写了两行、image_tag 不同
 # （master 自报 sha-e584fc5，server1 的 CronJob 跑 sha-b63d0d1）。

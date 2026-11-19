@@ -1,5 +1,5 @@
 {{- /*
-lease-api Deployment + Service, converged to the xinru live objects named
+lease-api Deployment + Service, converged to the the db host live objects named
 `legal-auth-broker` (no release prefix; the crawlers reach it at
 http://legal-auth-broker.scraw). Image is the Harbor registry-mirror build,
 NOT images.legalSources. Live pod carries NO imagePullSecrets.
